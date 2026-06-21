@@ -14,7 +14,10 @@ cd "$SCRIPT_DIR/.."
 
 # Credenciais: .env quando existir, senão defaults de desenvolvimento.
 if [[ -f .env ]]; then
-  set -a; . ./.env; set +a
+  set -a
+  # shellcheck source=/dev/null
+  . ./.env
+  set +a
 fi
 POSTGRES_USER="${POSTGRES_USER:-trio}"
 CLICKHOUSE_USER="${CLICKHOUSE_USER:-trio}"

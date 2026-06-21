@@ -16,12 +16,12 @@ Tudo depende desta sprint. Os critérios mínimos de aceitação começam aqui: 
 
 ## Definition of Done da Sprint
 
-- [ ] `docker compose up -d` sobe TimescaleDB, PostgreSQL, ClickHouse e Grafana sem erro.
-- [ ] `docker compose ps` mostra todos os serviços `healthy`.
-- [ ] Estrutura de diretórios do repositório criada conforme §6 do desafio.
-- [ ] `.env.example` presente; `.env` no `.gitignore`.
-- [ ] README raiz com instruções de setup mínimas.
-- [ ] Extensão TimescaleDB carregada e verificável (`SELECT extversion FROM pg_extension WHERE extname='timescaledb'`).
+- [x] `docker compose up -d` sobe TimescaleDB, PostgreSQL, ClickHouse e Grafana sem erro.
+- [x] `docker compose ps` mostra todos os serviços `healthy`.
+- [x] Estrutura de diretórios do repositório criada conforme §6 do desafio.
+- [x] `.env.example` presente; `.env` no `.gitignore`.
+- [x] README raiz com instruções de setup mínimas.
+- [x] Extensão TimescaleDB carregada e verificável (`SELECT extversion FROM pg_extension WHERE extname='timescaledb'`).
 
 ---
 
