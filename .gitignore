@@ -1,0 +1,40 @@
+# =============================================================================
+#  Trio Data Challenge — .gitignore (monorepo)
+# =============================================================================
+
+# --- Segredos / ambiente (NUNCA commitar) -----------------------------------
+.env
+*.env
+!.env.example
+
+# --- Python (pipeline / API das sprints 04–05) ------------------------------
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.venv/
+venv/
+env/
+
+# --- Dumps / artefatos de backup (sprint 06) --------------------------------
+*.dump
+*.sql.gz
+*.tar.gz
+desafioengenheirodedadostrio/trio-data-challenge/desafio-3/backup/*
+!desafioengenheirodedadostrio/trio-data-challenge/desafio-3/backup/.gitkeep
+
+# --- Logs / dados locais de containers --------------------------------------
+*.log
+data/
+volumes/
+
+# --- IDEs / SO --------------------------------------------------------------
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+
+# --- Ferramentas locais -----------------------------------------------------
+.claude/settings.local.json

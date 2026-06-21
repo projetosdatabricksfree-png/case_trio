@@ -1,0 +1,17 @@
+version: 2
+updates:
+  # Versões das GitHub Actions usadas nos workflows
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: ci
+
+  # Imagens Docker referenciadas no docker-compose.yml
+  - package-ecosystem: docker
+    directory: /desafioengenheirodedadostrio/trio-data-challenge
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: build

@@ -1,0 +1,20 @@
+title = "Trio Data Challenge — gitleaks config"
+
+[extend]
+useDefault = true
+
+# Defaults de DESENVOLVIMENTO intencionais (não são segredos reais). As credenciais de
+# produção virão de um cofre de segredos — ver docs/adr/ADR-0001-image-versioning.md.
+[allowlist]
+description = "Allowlist de credenciais de desenvolvimento e arquivos de exemplo."
+regexTarget = "match"
+regexes = [
+  '''trio2024''',
+  '''admin''',
+]
+paths = [
+  '''.*\.env\.example$''',
+  '''.*docker-compose\.yml$''',
+  '''.*grafana/provisioning/datasources/.*\.yml$''',
+  '''.*README\.md$''',
+]

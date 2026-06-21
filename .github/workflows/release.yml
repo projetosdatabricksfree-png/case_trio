@@ -1,0 +1,52 @@
+name: Release
+
+# "CD" de reprodutibilidade: o ambiente é local/defendido ao vivo, não há alvo de deploy.
+# Este workflow captura os digests das imagens efetivamente usadas (ver ADR-0001) e os
+# publica como artifact + anexo da release. Deploy real (AWS) é evolução futura.
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+env:
+  PROJECT_DIR: desafioengenheirodedadostrio/trio-data-challenge
+
+jobs:
+  digest-manifest:
+    name: Capture image digests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Pull images and capture digests
+        working-directory: ${{ env.PROJECT_DIR }}
+        run: |
+          cp .env.example .env
+          docker compose pull
+          {
+            echo "# Manifesto de imagens — $(date -u +%FT%TZ)"
+            echo "# Commit: ${GITHUB_SHA}"
+            echo
+            for svc in $(docker compose config --services); do
+              img=$(docker compose config --format json | jq -r --arg s "$svc" '.services[$s].image')
+              digest=$(docker inspect --format '{{if .RepoDigests}}{{index .RepoDigests 0}}{{else}}<none>{{end}}' "$img" 2>/dev/null || echo "<none>")
+              printf '%-18s %s\n' "$svc" "$digest"
+            done
+          } | tee image-digests.txt
+
+      - name: Upload manifest artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: image-digests
+          path: ${{ env.PROJECT_DIR }}/image-digests.txt
+
+      - name: Attach manifest to release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: ${{ env.PROJECT_DIR }}/image-digests.txt
