@@ -42,6 +42,13 @@ jobs:
             detect --no-git --source=/repo --config=/repo/.gitleaks.toml \
             --redact --verbose --exit-code=1
 
+      - name: Ruff (Python lint do seeder, best-effort)
+        continue-on-error: true
+        working-directory: ${{ env.PROJECT_DIR }}
+        run: |
+          python3 -m pip install --quiet --user ruff
+          python3 -m ruff check desafio-1/seed
+
   integration:
     name: Integration (compose up + smoke)
     runs-on: ubuntu-latest
@@ -59,6 +66,28 @@ jobs:
       - name: Smoke test
         working-directory: ${{ env.PROJECT_DIR }}
         run: ./scripts/smoke-test.sh
+
+      - name: Schema + seed smoke (migrate, seed ~20k, index, sanity)
+        working-directory: ${{ env.PROJECT_DIR }}
+        run: |
+          make migrate
+          make seed-smoke
+          make index
+          make sanity
+          # Asserções: seed minúsculo populou as 4 tabelas, todos os tipos
+          # presentes e há divergências de conciliação para a Q2 da Sprint 02.
+          read -r tx types div < <(docker compose exec -T timescaledb \
+            psql -U "${POSTGRES_USER:-trio}" -d trio_transactions -tAF' ' -c "
+              SELECT
+                (SELECT count(*) FROM transactions),
+                (SELECT count(DISTINCT type) FROM transactions),
+                (SELECT count(*) FROM reconciliation_events WHERE abs(difference) > 0.01);
+            ")
+          echo "transactions=$tx types=$types divergent_recon=$div"
+          test "$tx" -ge 15000 || { echo "FAIL: poucas transações"; exit 1; }
+          test "$types" -eq 4  || { echo "FAIL: nem todos os tipos presentes"; exit 1; }
+          test "$div" -ge 1    || { echo "FAIL: sem divergências de conciliação"; exit 1; }
+          echo "seed smoke assertions: OK"
 
       - name: Diagnostics on failure
         if: failure()

@@ -12,4 +12,6 @@ modelagem, seed em escala, queries otimizadas e a API que serve o ClickHouse.
 | `migration-analysis.md` | Análise de migração do legado → Aurora/RDS | Sprint 03 |
 | `REPORT.md` | Relatório técnico consolidado do Desafio 1 | Sprints 02/04 |
 
-> Placeholder da Sprint 00 (foundation). O conteúdo real entra nas sprints indicadas.
+> Sprint 01 concluída: `schemas/` (DDL + hypertable) e `seed/` (gerador 10M via
+> `COPY`) prontos — ver [`REPORT.md`](REPORT.md). `queries/` e `api/` entram nas
+> Sprints 02 e 04.

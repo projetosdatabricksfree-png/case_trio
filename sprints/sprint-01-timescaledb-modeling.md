@@ -17,12 +17,12 @@ Esta sprint cria o **coração operacional** da plataforma. A qualidade da model
 
 ## Definition of Done da Sprint
 
-- [ ] Schema `transactions`, `accounts`, `reconciliation_events` criado via migration idempotente.
-- [ ] `transactions` é hypertable com chunk interval definido e **justificado por escrito**.
-- [ ] 10M+ transações geradas em 12 meses, com distribuição realista validada por queries de sanidade.
-- [ ] Seed roda em janela aceitável (< 15 min como alvo) via `COPY`/batch.
-- [ ] `accounts` e `reconciliation_events` populados de forma coerente (FKs/relacionamentos plausíveis).
-- [ ] Documentação inicial da modelagem em `desafio-1/REPORT.md`.
+- [x] Schema `transactions`, `accounts`, `reconciliation_events` criado via migration idempotente.
+- [x] `transactions` é hypertable com chunk interval definido e **justificado por escrito**.
+- [x] 10M+ transações geradas em 12 meses, com distribuição realista validada por queries de sanidade.
+- [x] Seed roda em janela aceitável (< 15 min como alvo) via `COPY`/batch.
+- [x] `accounts` e `reconciliation_events` populados de forma coerente (FKs/relacionamentos plausíveis).
+- [x] Documentação inicial da modelagem em `desafio-1/REPORT.md`.
 
 ---
 

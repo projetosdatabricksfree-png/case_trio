@@ -206,6 +206,34 @@ services:
       retries: 10
       start_period: 45s
 
+  # ===========================================================================
+  #  Seeder — gerador/carga de dados sintéticos do Desafio 1 (one-shot)
+  #  NÃO sobe no `docker compose up` (profile `tools`). Executar via:
+  #    docker compose --profile tools run --rm seeder      (alvo `make seed`)
+  #  Sobrescreva o volume com SEED_TX=N para variar a escala.
+  # ===========================================================================
+  seeder:
+    build: ./desafio-1/seed
+    image: trio-seeder:local
+    profiles: ["tools"]
+    logging: *default-logging
+    environment:
+      <<: *pg-common
+      PGHOST: timescaledb
+      PGPORT: "5432"
+      PGDATABASE: trio_transactions
+      SEED_TX: ${SEED_TX:-10000000}
+      SEED_ACCOUNTS: ${SEED_ACCOUNTS:-50000}
+      RNG_SEED: ${RNG_SEED:-42}
+      SEED_BATCH: ${SEED_BATCH:-500000}
+      SEED_RECON_RATE: ${SEED_RECON_RATE:-0.2}
+      SEED_MISMATCH_RATE: ${SEED_MISMATCH_RATE:-0.03}
+      SEED_WINDOW_DAYS: ${SEED_WINDOW_DAYS:-365}
+      SEED_END_DATE: ${SEED_END_DATE:-2026-06-21}
+    depends_on:
+      timescaledb:
+        condition: service_healthy
+
 volumes:
   timescaledb_data:
     driver: local
