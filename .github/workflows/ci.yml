@@ -18,7 +18,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Validate docker-compose
         working-directory: ${{ env.PROJECT_DIR }}
@@ -48,7 +48,7 @@ jobs:
     needs: lint
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Bring up the stack (wait for healthy)
         working-directory: ${{ env.PROJECT_DIR }}
