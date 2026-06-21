@@ -51,7 +51,7 @@ services:
       - ./init/timescaledb:/docker-entrypoint-initdb.d:ro
     command:
       - "postgres"
-      - "-c" 
+      - "-c"
       - "shared_preload_libraries=timescaledb"
       - "-c"
       - "timescaledb.telemetry_level=off"
