@@ -1,0 +1,6 @@
+# Seeder do Desafio 1 (TimescaleDB). Versões em faixa para reprodutibilidade
+# sem travar em um patch específico. Pinagem por digest fica como recomendação
+# de produção (ver REPORT / ADR).
+psycopg[binary]>=3.2,<4
+Faker>=25,<31
+numpy>=1.26,<3
