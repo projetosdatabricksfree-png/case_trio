@@ -17,13 +17,13 @@ Esta é a sprint de **maior densidade técnica** do desafio — é aqui que a no
 
 ## Definition of Done da Sprint
 
-- [ ] 2 continuous aggregates criados **com refresh policy** e materializando dados.
-- [ ] Políticas de retenção (raw 90d, CAggs 2 anos) e compressão (chunks 7+ dias) ativas.
-- [ ] Q1–Q4 escritas, otimizadas, com `EXPLAIN ANALYZE` antes/depois documentado.
-- [ ] Índices criados justificados; impacto do particionamento (chunk exclusion) demonstrado.
-- [ ] Query com `time_bucket_gapfill` + `locf`/`interpolate` para 48h.
-- [ ] Procedimento de sanitização LGPD de chunks comprimidos documentado e (idealmente) demonstrado.
-- [ ] `REPORT.md` consolidado com todos os planos e análises.
+- [x] 2 continuous aggregates criados **com refresh policy** e materializando dados.
+- [x] Políticas de retenção (raw 90d, CAggs 2 anos) e compressão (chunks 7+ dias) ativas.
+- [x] Q1–Q4 escritas, otimizadas, com `EXPLAIN ANALYZE` antes/depois documentado.
+- [x] Índices criados justificados; impacto do particionamento (chunk exclusion) demonstrado.
+- [x] Query com `time_bucket_gapfill` + `locf`/`interpolate` para 48h.
+- [x] Procedimento de sanitização LGPD de chunks comprimidos documentado e (idealmente) demonstrado.
+- [x] `REPORT.md` consolidado com todos os planos e análises.
 
 ---
 

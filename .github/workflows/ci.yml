@@ -89,6 +89,25 @@ jobs:
           test "$div" -ge 1    || { echo "FAIL: sem divergências de conciliação"; exit 1; }
           echo "seed smoke assertions: OK"
 
+      - name: Sprint 02 — CAggs, políticas & queries (smoke)
+        working-directory: ${{ env.PROJECT_DIR }}
+        run: |
+          make index-s2
+          make caggs
+          make policies
+          make queries   # Q1–Q4 + percentis + gapfill; ON_ERROR_STOP valida execução
+          # Asserção: os 2 continuous aggregates materializaram dados.
+          read -r ca cb < <(docker compose exec -T timescaledb \
+            psql -U "${POSTGRES_USER:-trio}" -d trio_transactions -tAF' ' -c "
+              SELECT
+                (SELECT count(*) FROM cagg_volume_by_type_hourly),
+                (SELECT count(*) FROM cagg_settlement_by_institution_daily);
+            ")
+          echo "cagg_A=$ca cagg_B=$cb"
+          test "$ca" -ge 1 || { echo "FAIL: CAgg A não materializou"; exit 1; }
+          test "$cb" -ge 1 || { echo "FAIL: CAgg B não materializou"; exit 1; }
+          echo "sprint 02 assertions: OK"
+
       - name: Diagnostics on failure
         if: failure()
         working-directory: ${{ env.PROJECT_DIR }}

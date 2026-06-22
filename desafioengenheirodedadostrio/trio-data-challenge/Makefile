@@ -7,7 +7,8 @@ COMPOSE := docker compose
 
 .DEFAULT_GOAL := help
 .PHONY: help up down down-clean ps logs smoke lint psql-ts psql-legado ch reset \
-        migrate seed seed-smoke index analyze sanity
+        migrate seed seed-smoke index analyze sanity \
+        caggs policies index-s2 queries
 
 # psql não-interativo no TimescaleDB (lê SQL do stdin).
 PSQL_TS := $(COMPOSE) exec -T timescaledb psql -v ON_ERROR_STOP=1 -U $${POSTGRES_USER:-trio} -d trio_transactions
@@ -75,6 +76,34 @@ analyze: ## Atualiza estatísticas do planner (ANALYZE)
 
 sanity: ## Roda as queries de sanidade do seed
 	@for f in desafio-1/queries/sanity/*.sql; do \
+		printf '\n=== %s ===\n' "$$f"; \
+		$(PSQL_TS) < "$$f"; \
+	done
+
+# ----------------------------------------------------------------------------
+#  Sprint 02 — continuous aggregates, políticas e queries
+# ----------------------------------------------------------------------------
+caggs: ## Cria e materializa os 2 CAggs + refresh policies (Sprint 02)
+	@for f in desafio-1/queries/caggs/0[1-4]_*.sql; do \
+		printf '→ %s\n' "$$f"; \
+		$(PSQL_TS) < "$$f" || exit 1; \
+	done
+	@echo "caggs: OK"
+
+policies: ## Aplica compressão (7d) e retenção (raw 90d pausada + CAggs 2a)
+	$(PSQL_TS) < desafio-1/queries/policies/compression.sql
+	$(PSQL_TS) < desafio-1/queries/policies/retention.sql
+	@echo "policies: OK"
+
+index-s2: ## Cria os índices das queries Q2/Q4 (Sprint 02, rodar PÓS-seed)
+	$(PSQL_TS) < desafio-1/schemas/07_indexes_sprint02.sql
+	@echo "index-s2: OK"
+
+queries: ## Roda Q1–Q4 + percentis exatos + gapfill (Sprint 02)
+	@for f in desafio-1/queries/Q1.sql desafio-1/queries/Q2.sql \
+	          desafio-1/queries/Q3.sql desafio-1/queries/Q4.sql \
+	          desafio-1/queries/settlement_percentiles.sql \
+	          desafio-1/queries/timeseries_gapfill_48h.sql; do \
 		printf '\n=== %s ===\n' "$$f"; \
 		$(PSQL_TS) < "$$f"; \
 	done
