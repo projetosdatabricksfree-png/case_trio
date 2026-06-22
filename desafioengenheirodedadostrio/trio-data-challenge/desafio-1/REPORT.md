@@ -183,3 +183,173 @@ Validação rápida (CI/local): `make seed-smoke` (~20k) no lugar de `make seed`
   bit-a-bit reprodutíveis.
 - **Tuning de `chunk_time_interval`** revisitado se o padrão de acesso mudar
   (chunk-alvo ≈ 25% da RAM).
+
+---
+---
+
+# Sprint 02 — Agregados, Políticas & Queries
+
+> Evidência colhida no dataset real de **10.000.000** de transações (TimescaleDB
+> 2.28.0, imagem `timescale/timescaledb:latest-pg16`). Cada `EXPLAIN` foi rodado
+> com `(ANALYZE, BUFFERS)`; abaixo vai a **análise** dos planos, não o dump cru.
+
+## Decisão transversal — percentis e o TimescaleDB Toolkit (ausente)
+
+`percentile_cont` é um **ordered-set aggregate**: exige o conjunto inteiro e
+ordenado na avaliação e **não tem estado parcial combinável**, então o
+TimescaleDB **proíbe** seu uso em continuous aggregates (limitação independente
+de versão). O percentil aproximado *mergeável* (`uddsketch`/`tdigest`) vive no
+**TimescaleDB Toolkit**, que **não está na imagem provisionada**
+(`pg_available_extensions` lista só `timescaledb` + `pg_stat_statements`).
+
+**Decisão (alinhada à regra do case — "versões = ambiente fornecido"):** não
+troco a imagem nem reseeio 10M. O CAgg B materializa as **estatísticas
+mergeáveis nativas** (count/soma/soma de latência/max/settled/failed) e o
+**P95/P99 exato** fica numa query companheira (`settlement_percentiles.sql`) com
+chunk exclusion. **Produção:** `uddsketch` no CAgg (imagem `timescale/
+timescaledb-ha`) — registrado como ADR de ambiente. O custo medido do exato
+(17,8 s, abaixo) é a própria justificativa econômica do Toolkit.
+
+## Story 2.1 — Continuous Aggregates (+ refresh policies)
+
+| CAgg | Bucket | Group by | Linhas materializadas | Refresh policy |
+|---|---|---|---|---|
+| `cagg_volume_by_type_hourly` | 1 h | type, **status** | 121.696 | start 3d · end 1h · 1h (job 1000) |
+| `cagg_settlement_by_institution_daily` | 1 d | source_institution | 10.950 (=365×30) | start **7d** · end 1d · 1h (job 1001) |
+
+- **`status` adicionado ao CAgg A** (além de `type`): serve a Q1 (por tipo **e**
+  status) direto do agregado. Cardinalidade extra trivial (4×4/hora).
+- **`start_offset = 7 dias` no CAgg B** domina a cauda de liquidação: uma
+  transação criada hoje pode liquidar (`status='settled'`, `settled_at`) depois —
+  UPDATE num bucket de `created_at` já passado gera invalidação; 7d dá folga
+  sobre o boleto (~12 h). `end_offset` = 1 bucket (quarentena anti-churn).
+- Materialização inicial dos dois (full scan 10M ×2): **81 s**. Jobs de refresh
+  confirmados em `timescaledb_information.jobs`.
+- **P95/P99 exato** (`settlement_percentiles.sql`, 90 d, `status='settled'`):
+  **17,8 s** (sort por grupo de ~2,2 M settled). P95 ≈ 7.000 s, P99 ≈ 70.000 s
+  (cauda do boleto). → confirma o trade-off: exato e caro; `uddsketch` o tornaria
+  instantâneo a partir do CAgg.
+
+## Story 2.2 — Compressão & Retenção
+
+- **Compressão:** `segmentby = (type, source_institution)`, `orderby =
+  created_at DESC`, policy 7 d (job 1002). 5 chunks antigos comprimidos em 3,5 s →
+  **razão 5,6×** (79 MB → 14 MB via `chunk_compression_stats`).
+  - *Crítica medida do `segmentby`:* 4 tipos × 30 instituições = **120
+    segmentos/chunk**; com ~27 k linhas/chunk dá ~228 linhas/segmento (< batch de
+    1000 → batches parciais). 5,6× é bom, mas `segmentby = type` sozinho
+    provavelmente comprime melhor — mantido conforme a story, trade-off
+    registrado. `orderby created_at DESC` grava min/max por batch (exclusão de
+    batch por tempo) e serve `ORDER BY created_at DESC LIMIT` sem descomprimir.
+- **Retenção:** raw 90 d (job 1003), CAggs 2 anos (jobs 1004/1005). Independência:
+  o CAgg materializa numa hypertable separada → dropar o chunk raw **não apaga** o
+  agregado (downsample-and-keep). Segurança de ordem: raw 90 d só é seguro porque
+  o refresh já materializou, e retenção do CAgg (2a) > raw (90d).
+  - **Guard de demo:** a retenção **raw** fica registrada porém **pausada**
+    (`scheduled = FALSE`) neste ambiente, senão dropparia ~9 meses do seed e
+    destruiria a defesa ao vivo (Q1 de 6 meses, evidências de distribuição).
+    Produção: remover o `alter_job` (roda no schedule de 1 dia). Após aplicar
+    tudo: **`count(*)` segue 10.000.000**.
+
+## Story 2.3 / 2.4 — Q1–Q4 (EXPLAIN antes/depois)
+
+| Query | Antes (raw/ingênuo) | Depois (otimizado) | Ganho | Alavanca |
+|---|---|---|---|---|
+| **Q1** volume/valor tipo+status, mês, 6m | **46.170 ms** | **77 ms** (CAgg A) | ~**600×** | rollup do CAgg materializado |
+| **Q2** divergências 30d + JOINs | **6.145 ms** | **1.285 ms** | ~**4,8×** | índice parcial + CTE `MATERIALIZED` + bound de chunk exclusion |
+| **Q3** top-20 instituições 90d | **3.391 ms** | **8,9 ms** (CAgg B) | ~**380×** | rollup mergeável do CAgg |
+| **Q4** duplicatas (janela 5 min) | **721 ms** (Sort 15 MB) | **411 ms** (sem Sort) | Sort eliminado | índice composto p/ a window |
+
+**Q1 — o que mudou no plano.** Antes: `Custom Scan (ChunkAppend)` sobre
+`transactions` com **162 chunks excluídos** (predicado em `created_at`), mas ~180
+chunks restantes em **Seq Scan + Partial HashAggregate** (≈5 M linhas) →
+`Finalize HashAggregate` → **46 s** (1ª leitura fria de chunk = 37 s). Depois:
+ChunkAppend sobre `_materialized_hypertable_2` (o CAgg), **16 chunks excluídos**,
+Index Scans nos chunks de materialização, ~430 linhas parciais → **77 ms**,
+`Buffers: shared hit=4170 read=61`. A "indexação perfeita" da Q1 **é o próprio
+CAgg**: nenhum B-Tree no raw vence uma agregação de fração larga.
+
+**Q2 — a lição do misestimate (a mais didática).** A janela é a **data da
+transação** (`transaction_created_at`), não `reconciled_at` (o seed gravou
+`reconciled_at` uniforme = `now()`, logo não-seletivo — em produção acompanha a
+transação). Três alavancas, **todas necessárias**:
+1. **Índice parcial** `idx_recon_divergent (transaction_created_at) WHERE
+   difference > 0.01 OR difference < -0.01` — indexa só as **79 k** divergências
+   de 2 M; o range de 30 d as corta a **6.243**. Tamanho: **1,75 MB**.
+2. **CTE `MATERIALIZED`** — *barreira de otimização* que **força** o uso do
+   índice. Sem ela o planner **subestima** a seletividade do `OR` sobre a coluna
+   **GERADA** `difference` (estima `rows=1`) e cai num **Parallel Hash Join que
+   varre os 10M** → adicionar só o índice **não basta** (ficou em ~2,5 s ainda
+   varrendo). Com a CTE: `Index Scan using idx_recon_divergent` → 6.242 linhas em
+   **24 ms**.
+3. **Bound redundante** `t.created_at >= now()-30d` (idêntico via a igualdade do
+   join) — restaura **chunk exclusion** no lado transactions (`ConstraintAware
+   Append → Merge Append` em ~30 chunks via Index Scan), em vez de varrer a
+   hypertable. (Cuidado provado na prática: CTE **sem** esse bound explode para
+   **82 s** com cross-product de 156 M linhas, pelo mesmo `rows=1`.)
+   Resultado: **6.145 → 1.285 ms**. Resultado correto: **6.243** divergências.
+
+**Q3 — CAgg B serve tudo menos o tail.** Antes: `Parallel Custom Scan
+(ChunkAppend)`, **2 workers**, ~2,45 M linhas em ~90 chunks, `Gather Merge` →
+3,4 s. Depois: rollup de 90×30 = 2.700 linhas do CAgg → **8,9 ms**. Métricas
+mergeáveis: volume=`sum(total_amount)`, latência média=`sum(sum_latency_s)/
+sum(settled_count)` (por isso **não** materializamos `avg` direto), taxa de
+falha=`sum(failed_count)/sum(tx_count)`.
+
+**Q4 — `LAG` vs self-join e a eliminação do Sort.** Escolhido **window function
+`LAG`** (passe único O(n), sem risco quadrático do range self-join em chaves
+quentes). Antes: `ChunkAppend → Sort (quicksort 15 MB) → WindowAgg` = 721 ms.
+Depois, com `idx_tx_dedup (amount, source_institution, destination_institution,
+created_at)`: as 3 chaves casam o `PARTITION BY` e `created_at` dá o `ORDER BY` →
+**`Custom Scan (ConstraintAwareAppend) → Merge Append` (Sort Key = amount, src,
+dst, created_at) → `WindowAgg`**, com **`Index Only Scan` (Heap Fetches: 0)** e
+**sem nó `Sort`**. 721 → **411 ms**. Encontrou **2 duplicatas naturais** em 7 dias
+(coincidências exatas de valor+origem+destino em ≤5 min são raras — sinal
+saudável). Ordem das colunas é o ponto: igualdade primeiro (partição), tempo por
+último (ordenação) — invertê-la perderia a eliminação do Sort.
+
+**O que procurar no `EXPLAIN` (checklist usado acima):** `Chunks excluded`
+(exclusão temporal), `Custom Scan (ChunkAppend/ConstraintAwareAppend)`,
+`Merge Append` (append ordenado → sem Sort), `Index Only Scan` com
+`Heap Fetches: 0` (cobertura total), desaparecimento do nó `Sort`,
+`Rows Removed by Filter` caindo, `Buffers: shared read/hit` (I/O — a prova mais
+forte) e `Workers Launched` (paralelismo nas agregações inevitáveis do raw).
+
+## Story 2.5 — Série temporal com gapfill (48 h)
+
+`time_bucket_gapfill('1 hour', …)` gera os 48 buckets contínuos. Três tratamentos
+da mesma métrica, evidenciados no edge pós-dados (`now()` = 2026-06-22 14:33; dado
+acaba em 2026-06-21 23:59):
+
+| bucket (gap) | `coalesce(count,0)` | `locf(count)` | `interpolate(count)` |
+|---|---|---|---|
+| 2026-06-22 02:00 … 13:00 | **0** (correto p/ fluxo) | **177** (degrau — errado p/ volume) | *(NULL — sem âncora futura)* |
+
+**Decisão:** volume é métrica de **fluxo** → gap = **zero real** (`COALESCE 0`).
+`locf` (degrau) vale para métricas de **nível/estado**; `interpolate` (rampa) para
+sinais contínuos amostrados. Para volume, `locf` sustentaria volume fantasma à
+noite e `interpolate` inventaria rampa — ambos semanticamente errados.
+
+## Story 2.6 — Sanitização LGPD de chunks comprimidos
+
+- **Mitigação primária (vault/surrogate):** a PII vive em `accounts` (dimensão
+  **não-comprimida**); `transactions` só tem o UUID substituto. Esquecimento =
+  `UPDATE`/`DELETE` indexado em `accounts` → **O(1)**, sem descomprimir nada.
+  Demonstrado (em transação revertida): `holder_name`/`holder_document` →
+  `[ANONIMIZADO-LGPD]`.
+- **Runbook (fallback) p/ PII em chunk comprimido**, demonstrado ponta-a-ponta no
+  `_hyper_1_366_chunk`: `is_compressed=t` → **`decompress_chunk` (0,7 s)** → mask
+  (`UPDATE … metadata - 'cpf' - 'holder_name'`) → **`compress_chunk` (0,6 s)** →
+  `is_compressed=t`, **9.436 linhas preservadas**. Riscos (escopar a chunks
+  específicos, janela de manutenção, storage ~2× e I/O na descompressão) e a
+  preferência por sanitização **em lote** documentados em `lgpd_sanitization.sql`.
+
+## Índices criados nesta sprint (justificativa)
+
+| Índice | Tabela | Para | Por quê / ordem |
+|---|---|---|---|
+| `idx_recon_divergent` (parcial) | reconciliation_events | Q2 | `(transaction_created_at) WHERE divergente`: só ~79 k linhas; range 30d → 6 k; tempo 1º (range) |
+| `idx_tx_dedup` (composto) | transactions | Q4 | `(amount, source, destination, created_at)`: igualdade→PARTITION, tempo→ORDER, elimina Sort |
+
+Build dos dois em **23 s** sobre 10 M; `ANALYZE` em seguida (estatísticas para o
+planner — crítico para os planos acima).
