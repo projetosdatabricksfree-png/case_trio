@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # =============================================================================
 #  Trio Data Challenge — Smoke Test
-#  Valida que os 4 serviços subiram e estão saudáveis.
+#  Valida que os 5 serviços subiram e estão saudáveis.
 #  Uso:   ./scripts/smoke-test.sh   (ou: make smoke)
 #  Saída: 0 = tudo ok | 1 = alguma verificação falhou.
 #  Reutilizado pelo CI (.github/workflows/ci.yml, job integration).
@@ -23,6 +23,7 @@ POSTGRES_USER="${POSTGRES_USER:-trio}"
 CLICKHOUSE_USER="${CLICKHOUSE_USER:-trio}"
 CLICKHOUSE_PASSWORD="${CLICKHOUSE_PASSWORD:-trio2024}"
 GRAFANA_URL="${GRAFANA_URL:-http://localhost:3000}"
+API_URL="${API_URL:-http://localhost:8000}"
 
 # Cores apenas em TTY e quando NO_COLOR não está setado.
 if [[ -t 1 && -z "${NO_COLOR:-}" ]]; then
@@ -76,9 +77,17 @@ else
   fail "Grafana: /api/health não respondeu ok ($GRAFANA_URL)"
 fi
 
-# 5) Todos os containers reportam healthy
+# 5) API — /health responde status ok (ClickHouse servindo aplicação, RF-3.5)
+api_health="$(curl -fsS "$API_URL/health" 2>/dev/null || true)"
+if [[ "$api_health" == *'"status"'*'"ok"'* ]]; then
+  pass "API: /health status=ok ($API_URL)"
+else
+  fail "API: /health não respondeu ok ($API_URL)"
+fi
+
+# 6) Todos os containers reportam healthy
 printf "\n%sHealth dos containers:%s\n" "$BOLD" "$RESET"
-for c in trio-timescaledb trio-postgres-legado trio-clickhouse trio-grafana; do
+for c in trio-timescaledb trio-postgres-legado trio-clickhouse trio-grafana trio-api; do
   status="$(docker inspect \
     --format '{{if .State.Health}}{{.State.Health.Status}}{{else}}no-healthcheck{{end}}' \
     "$c" 2>/dev/null || echo "absent")"

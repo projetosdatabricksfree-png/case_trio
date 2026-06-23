@@ -9,13 +9,17 @@ COMPOSE := docker compose
 .PHONY: help up down down-clean ps logs smoke lint psql-ts psql-legado ch reset \
         migrate seed seed-smoke index analyze sanity \
         caggs policies index-s2 queries \
-        migrate-legado seed-legado index-legado analyze-legado queries-legado
+        migrate-legado seed-legado index-legado analyze-legado queries-legado \
+        migrate-ch seed-ch seed-ch-smoke optimize-ch queries-ch
 
 # psql não-interativo no TimescaleDB (lê SQL do stdin).
 PSQL_TS := $(COMPOSE) exec -T timescaledb psql -v ON_ERROR_STOP=1 -U $${POSTGRES_USER:-trio} -d trio_transactions
 
 # psql não-interativo no PostgreSQL legado (lê SQL do stdin).
 PSQL_LEGADO := $(COMPOSE) exec -T postgres-legado psql -v ON_ERROR_STOP=1 -U $${POSTGRES_USER:-trio} -d trio_legado
+
+# clickhouse-client não-interativo (lê SQL do stdin; multiquery p/ arquivos com vários statements).
+CH_Q := $(COMPOSE) exec -T clickhouse clickhouse-client --user $${CLICKHOUSE_USER:-trio} --password $${CLICKHOUSE_PASSWORD:-trio2024} -d trio_analytics --multiquery
 
 help: ## Lista os alvos disponíveis
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | \
@@ -136,4 +140,33 @@ queries-legado: ## Roda as queries do legado (relatório de contas + lookup de c
 	@for f in desafio-1/queries/legacy/*.sql; do \
 		printf '\n=== %s ===\n' "$$f"; \
 		$(PSQL_LEGADO) < "$$f"; \
+	done
+
+# ----------------------------------------------------------------------------
+#  Sprint 04 — ClickHouse: schema (tabela + MVs + dictionary), carga e queries
+# ----------------------------------------------------------------------------
+migrate-ch: ## Aplica o schema do ClickHouse (tabela + 2 MVs + dictionary). Requer seed-legado p/ o dictionary
+	@for f in desafio-1/schemas/clickhouse/0[0-3]_*.sql; do \
+		printf '→ %s\n' "$$f"; \
+		$(CH_Q) < "$$f" || exit 1; \
+	done
+	@printf '→ %s (senha injetada do .env via sed)\n' "desafio-1/schemas/clickhouse/04_dict_institutions.sql"
+	@sed "s/__PG_PASSWORD__/$${POSTGRES_PASSWORD:-trio2024}/" \
+		desafio-1/schemas/clickhouse/04_dict_institutions.sql | $(CH_Q) || exit 1
+	@echo "migrate-ch: OK"
+
+seed-ch: ## Carga do ClickHouse (CH_SEED_TX default 5M; suba p/ o headline sub-segundo)
+	$(COMPOSE) --profile tools run --rm seeder-clickhouse
+
+seed-ch-smoke: ## Carga pequena do ClickHouse (~200k) p/ validação local/CI
+	CH_SEED_TX=200000 CH_SEED_BATCH=200000 $(COMPOSE) --profile tools run --rm seeder-clickhouse
+
+optimize-ch: ## Força o merge (OPTIMIZE FINAL) p/ validar o dedup do ReplacingMergeTree
+	$(CH_Q) -q "OPTIMIZE TABLE trio_analytics.transactions FINAL"
+	@echo "optimize-ch: OK"
+
+queries-ch: ## Roda as queries do ClickHouse (flagship sub-segundo, dictGet, MVs, dedup)
+	@for f in desafio-1/queries/clickhouse/*.sql; do \
+		printf '\n=== %s ===\n' "$$f"; \
+		$(CH_Q) < "$$f"; \
 	done

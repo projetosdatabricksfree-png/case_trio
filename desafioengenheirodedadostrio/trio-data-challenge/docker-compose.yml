@@ -207,6 +207,40 @@ services:
       start_period: 45s
 
   # ===========================================================================
+  #  API — FastAPI + Uvicorn servindo o ClickHouse (Desafio 1 / Parte C, RF-3.5)
+  #  ClickHouse servindo APLICAÇÃO: volume em tempo real + saúde por instituição.
+  #  Acesso: http://localhost:8000 (docs em /docs). Requer schema+carga do CH.
+  # ===========================================================================
+  api:
+    build: ./desafio-1/api
+    image: trio-api:local
+    container_name: trio-api
+    restart: unless-stopped
+    logging: *default-logging
+    ports:
+      - "8000:8000"
+    environment:
+      CH_HOST: clickhouse
+      CH_HTTP_PORT: "8123"
+      CH_DATABASE: trio_analytics
+      CLICKHOUSE_USER: ${CLICKHOUSE_USER:-trio}
+      CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD:-trio2024}
+    depends_on:
+      clickhouse:
+        condition: service_healthy
+    healthcheck:
+      # A imagem python:slim não traz curl/wget; usamos urllib (sempre presente).
+      test: ["CMD-SHELL", "python -c \"import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8000/health').status==200 else 1)\""]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+
+  # ===========================================================================
   #  Seeder — gerador/carga de dados sintéticos do Desafio 1 (one-shot)
   #  NÃO sobe no `docker compose up` (profile `tools`). Executar via:
   #    docker compose --profile tools run --rm seeder      (alvo `make seed`)
@@ -256,6 +290,36 @@ services:
       RNG_SEED: ${RNG_SEED:-42}
     depends_on:
       postgres-legado:
+        condition: service_healthy
+
+  # ===========================================================================
+  #  Seeder do ClickHouse — popula trio_analytics.transactions — one-shot
+  #  REUSA a imagem trio-seeder:local (entrypoint run_clickhouse.py) e generators.py
+  #  (mesma SSOT de distribuições do TimescaleDB). Schema (make migrate-ch) ANTES,
+  #  p/ as MVs materializarem na carga. Executar via:
+  #    docker compose --profile tools run --rm seeder-clickhouse  (alvo `make seed-ch`)
+  #  Suba CH_SEED_TX (ex.: 100000000) p/ validar a query sub-segundo no headline.
+  # ===========================================================================
+  seeder-clickhouse:
+    build: ./desafio-1/seed
+    image: trio-seeder:local
+    profiles: ["tools"]
+    logging: *default-logging
+    command: ["python", "run_clickhouse.py"]
+    environment:
+      CH_HOST: clickhouse
+      CH_HTTP_PORT: "8123"
+      CH_DATABASE: trio_analytics
+      CLICKHOUSE_USER: ${CLICKHOUSE_USER:-trio}
+      CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD:-trio2024}
+      CH_SEED_TX: ${CH_SEED_TX:-5000000}
+      CH_SEED_BATCH: ${CH_SEED_BATCH:-1000000}
+      CH_SEED_ACCOUNTS: ${CH_SEED_ACCOUNTS:-50000}
+      RNG_SEED: ${RNG_SEED:-42}
+      SEED_WINDOW_DAYS: ${SEED_WINDOW_DAYS:-365}
+      SEED_END_DATE: ${SEED_END_DATE:-2026-06-21}
+    depends_on:
+      clickhouse:
         condition: service_healthy
 
 volumes:

@@ -10,7 +10,7 @@ Réplica autocontida da plataforma de dados da Trio: **3 bancos + observabilidad
 ## Pré-requisitos
 
 - **Docker Engine 24+** e **Docker Compose v2** (`docker compose`, não o antigo `docker-compose`).
-- Portas livres no host: `5432`, `5433`, `8123`, `9000`, `3000`.
+- Portas livres no host: `5432`, `5433`, `8123`, `9000`, `3000`, `8000`.
 - (Opcional) `make` para os atalhos.
 
 ## Quick Start
@@ -18,13 +18,13 @@ Réplica autocontida da plataforma de dados da Trio: **3 bancos + observabilidad
 ```bash
 cp .env.example .env
 docker compose up -d --wait      # sobe e espera todos ficarem healthy
-./scripts/smoke-test.sh          # valida os 4 serviços
+./scripts/smoke-test.sh          # valida os 5 serviços
 
 # Equivalente com make:
 make up && make smoke
 ```
 
-`docker compose ps` deve mostrar os 4 serviços `healthy`.
+`docker compose ps` deve mostrar os 5 serviços `healthy`.
 
 ## Serviços
 
@@ -38,6 +38,7 @@ Versões conforme o ambiente fornecido pelo escopo (Desafio Técnico §2.2). A e
 | PostgreSQL Legado | `postgres:16-bookworm` | `5433` | `trio_legado` | Legado (candidato a Aurora/RDS) |
 | ClickHouse | `clickhouse/clickhouse-server:latest` | `8123` (HTTP) / `9000` (nativo) | `trio_analytics` | Motor analítico |
 | Grafana | `grafana/grafana:latest` | `3000` | — | Dashboards (admin/admin) |
+| API | FastAPI + Uvicorn (`./desafio-1/api`) | `8000` | — | ClickHouse servindo aplicação (RF-3.5) |
 
 ## Conexões
 
@@ -51,6 +52,9 @@ docker compose exec clickhouse clickhouse-client --user trio --password trio2024
 # ClickHouse (HTTP)
 curl "http://localhost:8123/?user=trio&password=trio2024&database=trio_analytics" --data "SELECT 1"
 # Grafana — http://localhost:3000 (admin/admin), datasources já provisionados
+# API — http://localhost:8000/docs (Swagger); ClickHouse em tempo real, em JSON
+curl -fsS "http://localhost:8000/transactions/volume/realtime?window_minutes=60"
+curl -fsS "http://localhost:8000/institutions/00000000/health?window_minutes=1440"
 ```
 
 Atalhos: `make psql-ts`, `make psql-legado`, `make ch`.
@@ -60,7 +64,7 @@ Atalhos: `make psql-ts`, `make psql-legado`, `make ch`.
 | Alvo | O que faz |
 |---|---|
 | `make up` | Sobe e aguarda todos healthy (`up -d --wait`) |
-| `make smoke` | Roda o smoke test dos 4 serviços |
+| `make smoke` | Roda o smoke test dos 5 serviços |
 | `make ps` / `make logs` | Status/health · logs em tempo real |
 | `make down` | Derruba containers (**mantém** dados) |
 | `make down-clean` | Derruba e **apaga** volumes (re-roda `init/`) |
@@ -68,18 +72,19 @@ Atalhos: `make psql-ts`, `make psql-legado`, `make ch`.
 | `make lint` | Valida o compose + linters locais |
 | `make migrate` · `seed` · `index` · `queries` | TimescaleDB (Sprint 01–02): schema → seed 10M → índices → Q1–Q4 |
 | `make migrate-legado` · `seed-legado` · `index-legado` · `queries-legado` | Legado (Sprint 03): schema → seed → índices → queries |
+| `make migrate-ch` · `seed-ch` · `optimize-ch` · `queries-ch` | ClickHouse (Sprint 04): tabela+MVs+dictionary → carga → OPTIMIZE FINAL → flagship/dictGet |
 
 ## Estrutura
 
 ```
 trio-data-challenge/
-├── docker-compose.yml          # 4 serviços, healthchecks, tuning, log rotation
+├── docker-compose.yml          # 5 serviços, healthchecks, tuning, log rotation
 ├── .env.example                # credenciais de dev (copie para .env)
 ├── Makefile                    # atalhos de operação
-├── scripts/smoke-test.sh       # validação dos 4 serviços (usada também no CI)
+├── scripts/smoke-test.sh       # validação dos 5 serviços (usada também no CI)
 ├── init/                       # SQL de bootstrap (só roda em volume vazio)
 │   ├── timescaledb/  · postgres-legado/  · clickhouse/
-├── desafio-1/                  # Performance e tuning (schemas[/legacy], seed, queries[/legacy], api)
+├── desafio-1/                  # Performance e tuning (schemas[/legacy,/clickhouse], seed, queries[/legacy,/clickhouse], api)
 ├── desafio-2/                  # Pipelines e arquitetura (pipeline, diagrams, ADR)
 ├── desafio-3/                  # Operação e observabilidade
 │   └── grafana/provisioning/   # datasources (✅) + dashboards/alertas (Sprint 06)

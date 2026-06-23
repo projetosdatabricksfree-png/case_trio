@@ -4,3 +4,5 @@
 psycopg[binary]>=3.2,<4
 Faker>=25,<31
 numpy>=1.26,<3
+clickhouse-connect>=0.7,<1
+pandas>=2,<3
