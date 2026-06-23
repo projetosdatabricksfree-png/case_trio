@@ -1,0 +1,6 @@
+# API do Desafio 1 / Parte C — FastAPI servindo o ClickHouse (RF-3.5).
+# Versões em faixa (reprodutibilidade sem travar num patch). Pinagem por digest
+# fica como recomendação de produção (ver REPORT / ADR).
+fastapi>=0.110,<1
+uvicorn[standard]>=0.29,<1
+clickhouse-connect>=0.7,<1

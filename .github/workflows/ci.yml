@@ -137,6 +137,46 @@ jobs:
           test "$q33" -ge 1     || { echo "FAIL: Q3.3 não retornaria linhas"; exit 1; }
           echo "sprint 03 assertions: OK"
 
+      - name: Sprint 04 — ClickHouse (schema, carga, MVs, dictionary & queries)
+        working-directory: ${{ env.PROJECT_DIR }}
+        env:
+          CLICKHOUSE_USER: trio
+          CLICKHOUSE_PASSWORD: trio2024
+        run: |
+          # Ordem importa: o legado já foi semeado (passo anterior), então o
+          # dictionary acha institution_configs. Schema ANTES da carga -> as MVs
+          # materializam nos INSERTs do seed.
+          make migrate-ch
+          make seed-ch-smoke    # ~200k (reusa a imagem trio-seeder:local já buildada)
+          make queries-ch       # flagship + dictGet + reads -Merge + cria a tabela do dedup
+          make optimize-ch
+          # Asserções: base carregada, MVs materializaram, dictionary em uso e dedup
+          # do ReplacingMergeTree. IFS=tab: o nome da instituição tem espaços.
+          IFS=$'\t' read -r raw mvd mvf dname ddedup < <(docker compose exec -T clickhouse \
+            clickhouse-client --user trio --password trio2024 -d trio_analytics -q "
+              SELECT
+                (SELECT count() FROM transactions),
+                (SELECT count() FROM tx_daily_summary),
+                (SELECT count() FROM tx_status_funnel),
+                (SELECT dictGet('trio_analytics.dict_institutions','institution_name','00000000')),
+                (SELECT count() FROM transactions_dedup_demo)
+              FORMAT TSV")
+          echo "raw=$raw mv_daily=$mvd mv_funnel=$mvf dict_name='$dname' dedup_rows=$ddedup"
+          test "$raw" -ge 150000             || { echo "FAIL: poucas transações no ClickHouse"; exit 1; }
+          test "$mvd" -ge 1                  || { echo "FAIL: MV diária não materializou"; exit 1; }
+          test "$mvf" -ge 1                  || { echo "FAIL: MV funil não materializou"; exit 1; }
+          test "$dname" = "Banco do Brasil S.A." || { echo "FAIL: dictGet não retornou o nome esperado"; exit 1; }
+          test "$ddedup" -eq 1              || { echo "FAIL: dedup do ReplacingMergeTree != 1 linha"; exit 1; }
+          # Flagship sub-segundo retorna linhas.
+          frows=$(docker compose exec -T clickhouse clickhouse-client --user trio --password trio2024 \
+            -d trio_analytics --multiquery < desafio-1/queries/clickhouse/grafana_pix_success.sql | wc -l)
+          echo "flagship_rows=$frows"
+          test "$frows" -ge 1 || { echo "FAIL: flagship não retornou linhas"; exit 1; }
+          # API servindo JSON real do ClickHouse (ClickHouse servindo aplicação).
+          curl -fsS "http://localhost:8000/transactions/volume/realtime?window_minutes=1440" \
+            | grep -q '"count"' || { echo "FAIL: API não retornou JSON esperado"; exit 1; }
+          echo "sprint 04 assertions: OK"
+
       - name: Diagnostics on failure
         if: failure()
         working-directory: ${{ env.PROJECT_DIR }}

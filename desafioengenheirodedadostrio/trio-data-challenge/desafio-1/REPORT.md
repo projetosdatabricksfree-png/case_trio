@@ -459,3 +459,145 @@ critérios e **recomendação de RDS Multi-AZ** para legado de referência/baixo
 (replicação lógica nativa › AWS DMS › Blue/Green), **runbook de 72h** e
 **riscos/rollback** — com destaque para a **reconciliação de sequências/IDENTITY**,
 consequência direta da decisão de chaves deste schema.
+
+---
+
+# Sprint 04 — ClickHouse: Motor de Dados
+
+> Banco analítico **`trio_analytics`** (ClickHouse `latest`). Schema, 2 MVs e o
+> dictionary aplicados por **`make migrate-ch`** (idempotente). Carga via **loader
+> Python que reusa `generators.py`** — a MESMA SSOT de distribuições do TimescaleDB.
+> Evidência de performance colhida com **50 milhões** de transações (`make seed-ch`
+> com `CH_SEED_TX=50000000`). O ClickHouse serve **dois públicos**: dashboards
+> (Grafana) e aplicação (API FastAPI).
+
+## Por que `make migrate-ch` e não `init/clickhouse/`
+
+Espelha a decisão das Sprints 01/03: `init/` só roda na **1ª criação do volume** e
+não pode depender de outro serviço. O **dictionary lê do `postgres-legado`**
+(`institution_configs`), que só existe **após `seed-legado`** — uma dependência
+cross-serviço que o `init/` não resolve. Aplicar por `make` (pós-`up --wait`,
+pós-seed) é robusto, re-executável e **defensável ao vivo**. `init/clickhouse/`
+mantém apenas `CREATE DATABASE`.
+
+## Story 4.1 — Engine, `ORDER BY`, partição e codecs
+
+- **`ENGINE = ReplacingMergeTree(version)`** — transações mudam de status sem
+  `UPDATE`: a última versão (maior `version` = `updated_at`) vence no merge.
+  Descartados: `MergeTree` (sem dedup → versões antigas vazam), `AggregatingMergeTree`
+  (é para as MVs), `CollapsingMergeTree` (exige `sign` e reenviar o estado anterior —
+  frágil para o pipeline idempotente da Sprint 05).
+- **`ORDER BY (source_institution, type, created_at, id)`** é a chave de ordenação
+  **e de dedup**. Todas as colunas são **imutáveis por transação** (só
+  `status`/`settled_at`/`version` mudam), então a tupla é **1:1 com `id`** e o
+  Replacing colapsa exatamente as versões da *mesma* transação. A ordem
+  (instituição → tipo → tempo) casa com os filtros dos Data Champions e com a query
+  flagship → **poda de granules**. Alternativa liderada por tempo
+  (`toDate(created_at), …`) favoreceria varreduras temporais puras, mas perderia a
+  seletividade por instituição/tipo que domina aqui.
+- **`PARTITION BY toYYYYMM(created_at)`** — mensal: poda forte de janelas recentes sem
+  explodir o nº de partes (diária geraria partes demais; anual poda fraca).
+- **Codecs/tipos:** `Delta, ZSTD` em `created_at`/`version` (quase monotônicos);
+  `LowCardinality(String)` em `status`/`type`/`institution`/`currency` (dicionário
+  interno → menos I/O e filtro mais rápido); `Decimal(18,2)` no dinheiro (nunca float
+  no schema); `id`/`external_id` `DEFAULT generateUUIDv4()` → gerados no servidor,
+  fora do INSERT da carga (mesmo truque do seed do TimescaleDB).
+
+## Story 4.2 — Materialized Views (AggregatingMergeTree + States/Merge)
+
+Duas MVs gravam **estados parciais** de agregação na inserção; a leitura finaliza com
+`-Merge` (combinar estados é barato → dashboards não reprocessam a base):
+
+- **`mv_tx_daily_summary`** → `tx_daily_summary` por `(dia, instituição, tipo)`:
+  `countState/sumState/avgState/quantileState(0.95)` sobre `amount`. Leitura:
+  `countMerge/sumMerge/avgMerge/quantileMerge(0.95)`.
+- **`mv_tx_status_funnel`** → `tx_status_funnel` por `(dia, tipo, status)`: `countState`
+  + `avgStateIf(latência, isNotNull(settled_at))`. As latências batem com o gerador:
+  **pix ≈ 15 s · card ≈ 60 s · ted ≈ 3.7 k s · boleto ≈ 43 k s**; `pending`/`failed`
+  ficam `NULL` (sem liquidação).
+
+**Caveat honesto (gancho da Sprint 05):** a MV processa o **bloco inserido, antes do
+dedup** do ReplacingMergeTree. Na carga estática desta sprint cada transação entra
+**uma vez** (estado final) → agregados exatos. No pipeline contínuo, reinserir a mesma
+tx (`pending→settled`) faria a MV **contar em dobro** — mitigação (alimentar a MV de
+fonte deduplicada, ou agregar só a versão terminal) registrada para a Sprint 05.
+
+## Story 4.3 — Dictionary (`dictGet`) vs JOIN
+
+`dict_institutions` (`institution_code → institution_name`, …) tem **fonte
+`POSTGRESQL(postgres-legado.institution_configs)`** — fecha o gancho da Sprint 03: a
+referência tem **uma origem** (SSOT → legado) e o ClickHouse a consome em memória.
+`LAYOUT(COMPLEX_KEY_HASHED())` (chave `String`), `LIFETIME(MIN 300 MAX 600)` para
+refresh automático. **`dictGet` > JOIN** aqui: lookup **O(1) em memória** de ~30
+linhas de referência que mudam pouco, sem hash join nem ler a tabela do disco; JOIN só
+compensaria para tabelas grandes/voláteis. Em uso na flagship, na API e em
+`dict_lookup_demo.sql`.
+
+> **Segredo fora do repo:** o `.sql` commitado usa o placeholder `__PG_PASSWORD__`;
+> `make migrate-ch` injeta `POSTGRES_PASSWORD` do `.env` via `sed` no apply. Mais limpo
+> que `datasources.yml` (que hoje commita a senha dev — dívida pré-existente).
+
+## Story 4.4 — Query Grafana sub-segundo (flagship)
+
+`grafana_pix_success.sql` — taxa de sucesso **Pix por instituição por hora** nas
+últimas 24h + **delta %** vs o mesmo horário do dia anterior. Ancorada a
+**`max(created_at)`** (seed estático) e enriquecida com `dictGet`. **Servida da tabela
+raw** (sem MV): `type='pix'` + janela de 48h são altamente seletivos.
+
+| Métrica (50M linhas · 3,49 GiB · medido em `system.query_log`) | Valor |
+|---|---:|
+| Tempo — **cold** (1ª execução) | **514 ms** |
+| Tempo — **warm** | **87–119 ms** |
+| Linhas lidas | **689 mil de 50M → 1,38%** |
+| Bytes lidos | **6,84 MiB de 3,49 GiB** |
+| Linhas no resultado | 715 |
+
+Sub-segundo confortável: a query lê **1,38% da tabela** (689k de 50M linhas) e
+**6,84 MiB**. A poda funciona em duas camadas: `PARTITION BY toYYYYMM` elimina meses fora da janela;
+o `ORDER BY (source_institution, type, created_at, …)` poda **granules** dentro de cada
+prefixo `(instituição, pix)` — só uma fração mínima das linhas é lida. O design
+**sustenta sub-segundo até centenas de milhões**: a janela de 48h é ~0,5% de um ano de
+dados, então o custo cresce com o *tamanho da janela*, não com o total da tabela.
+(Otimização futura registrada: MV horária de sucesso para um dashboard always-on.)
+
+## Story 4.5 — API: ClickHouse servindo aplicação (RF-3.5)
+
+FastAPI (`desafio-1/api/`, serviço `api` no compose, porta 8000), `clickhouse-connect`,
+**queries parametrizadas** (binders `{name:Type}` → sem SQL injection):
+
+- `GET /transactions/volume/realtime?window_minutes=N` → volume agregado recente
+  (count, soma, breakdown por tipo) — **painel de operações**.
+- `GET /institutions/{code}/health?window_minutes=N` → taxa de sucesso/falha recente da
+  instituição, **nome via `dictGet`** — **regra de negócio**.
+
+Ambos ancorados a `max(created_at)`. `/health` não toca o ClickHouse (liveness do
+compose). Demonstra que o ClickHouse serve **aplicação**, não só dashboard.
+
+```bash
+curl -fsS "http://localhost:8000/transactions/volume/realtime?window_minutes=60" | jq
+curl -fsS "http://localhost:8000/institutions/00000000/health?window_minutes=1440" | jq
+```
+
+## Story 4.6 — Carga e validação do dedup
+
+- **Loader** (`seed_clickhouse.py`): reusa `generators.py`; gera por lotes e insere via
+  `clickhouse-connect` `insert_df` (datetime64/NaT vetorizados). `id`/`external_id`/
+  `currency` ficam fora do INSERT (DEFAULT no servidor); `version = max(created_at,
+  settled_at)`. Idempotente (TRUNCATE base + targets antes de carregar). Escala por env
+  (`CH_SEED_TX`); o schema (`migrate-ch`) roda **antes** → as MVs materializam na carga.
+  Throughput medido: **50M em 525 s (~95k linhas/s)** com as 2 MVs agregando em linha.
+- **Dedup do ReplacingMergeTree** (`replacing_dedup_demo.sql`, tabela descartável p/ não
+  sujar a carga): dois INSERTs (`pending` v1, `settled` v2) → `count() = 2` **antes**;
+  `count() FINAL = 1` (`settled`, maior `version`); `OPTIMIZE … FINAL` faz o merge
+  físico → 1 linha. `make optimize-ch` valida o dedup na tabela principal.
+
+## Reproduzir / validar (Sprint 04)
+
+```bash
+make up                         # 5 serviços healthy (inclui a API)
+make migrate-legado seed-legado # institution_configs (fonte do dictionary)
+make migrate-ch                 # tabela + 2 MVs + dictionary (idempotente)
+CH_SEED_TX=50000000 make seed-ch    # carga (suba p/ 100M+ no headline)
+make queries-ch                 # flagship + dictGet + reads -Merge + dedup
+make optimize-ch                # OPTIMIZE FINAL (valida dedup)
+```

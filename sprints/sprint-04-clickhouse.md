@@ -17,12 +17,12 @@ ClickHouse é o motor que serve **dois públicos**: Data Champions (dashboards) 
 
 ## Definition of Done da Sprint
 
-- [ ] Schema `transactions` no ClickHouse com engine, `ORDER BY`, `PARTITION BY` e compressão justificados.
-- [ ] 2 materialized views (resumo diário + funil de status) materializando corretamente.
-- [ ] Dictionary (institution_code → name) criado, carregado e usado em query.
-- [ ] Query Grafana (sucesso Pix por instituição/hora + delta % vs dia anterior) rodando sub-segundo.
-- [ ] API FastAPI servindo volume em tempo real do ClickHouse, retornando JSON.
-- [ ] Dados de teste suficientes para validar performance (idealmente 100M+ ou justificar escala menor com projeção).
+- [x] Schema `transactions` no ClickHouse com engine, `ORDER BY`, `PARTITION BY` e compressão justificados.
+- [x] 2 materialized views (resumo diário + funil de status) materializando corretamente.
+- [x] Dictionary (institution_code → name) criado, carregado e usado em query.
+- [x] Query Grafana (sucesso Pix por instituição/hora + delta % vs dia anterior) rodando sub-segundo.
+- [x] API FastAPI servindo volume em tempo real do ClickHouse, retornando JSON.
+- [x] Dados de teste suficientes para validar performance (50M carregados + projeção p/ 100M+).
 
 ---
 
