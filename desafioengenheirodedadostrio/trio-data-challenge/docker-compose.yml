@@ -234,6 +234,30 @@ services:
       timescaledb:
         condition: service_healthy
 
+  # ===========================================================================
+  #  Seeder do Legado — popula o PostgreSQL legado (trio_legado) — one-shot
+  #  REUSA a mesma imagem do seeder (trio-seeder:local), trocando só o entrypoint
+  #  e o destino (PGHOST/PGDATABASE). Executar via:
+  #    docker compose --profile tools run --rm seeder-legado  (alvo `make seed-legado`)
+  # ===========================================================================
+  seeder-legado:
+    build: ./desafio-1/seed
+    image: trio-seeder:local
+    profiles: ["tools"]
+    logging: *default-logging
+    command: ["python", "run_legacy.py"]
+    environment:
+      <<: *pg-common
+      PGHOST: postgres-legado
+      PGPORT: "5432"
+      PGDATABASE: trio_legado
+      SEED_USERS: ${SEED_USERS:-30000}
+      SEED_ACCOUNTS_PER_USER: ${SEED_ACCOUNTS_PER_USER:-1.3}
+      RNG_SEED: ${RNG_SEED:-42}
+    depends_on:
+      postgres-legado:
+        condition: service_healthy
+
 volumes:
   timescaledb_data:
     driver: local

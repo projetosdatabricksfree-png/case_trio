@@ -17,10 +17,10 @@ A implementação aqui é **leve**, mas o **documento de migração** é onde se
 
 ## Definition of Done da Sprint
 
-- [ ] Schema legado (usuários, contas, configurações de instituições parceiras) criado e populado.
-- [ ] 2+ queries complexas escritas, otimizadas, com `EXPLAIN ANALYZE` antes/depois.
-- [ ] Índices justificados; ganho mensurável documentado.
-- [ ] `migration-analysis.md` (1 página) completo: opções, critérios, estratégia zero-downtime, riscos e rollback.
+- [x] Schema legado (usuários, contas, configurações de instituições parceiras) criado e populado.
+- [x] 2+ queries complexas escritas, otimizadas, com `EXPLAIN ANALYZE` antes/depois.
+- [x] Índices justificados; ganho mensurável documentado.
+- [x] `migration-analysis.md` (1 página) completo: opções, critérios, estratégia zero-downtime, riscos e rollback.
 
 ---
 

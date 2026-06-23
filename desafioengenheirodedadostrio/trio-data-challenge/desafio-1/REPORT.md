@@ -353,3 +353,109 @@ noite e `interpolate` inventaria rampa — ambos semanticamente errados.
 
 Build dos dois em **23 s** sobre 10 M; `ANALYZE` em seguida (estatísticas para o
 planner — crítico para os planos acima).
+
+---
+---
+
+# Sprint 03 — PostgreSQL Legado & Migração
+
+> Banco **`trio_legado`** (PostgreSQL 16, `postgres:16-bookworm`), separado do
+> TimescaleDB. Evidência colhida com o seed default: **30 configs · 61 parceiros ·
+> 30.000 users · 39.000 accounts · 39.000 limits** (carga em **2,3 s**). `EXPLAIN
+> (ANALYZE, BUFFERS)`; abaixo a análise dos planos.
+
+## Decisões de modelagem
+
+- **Banco separado → referência duplicada da SSOT.** Sem FK cross-database, a lista
+  de instituições é materializada aqui em `institution_configs`, mas **gerada da
+  mesma `institutions.py`** que alimenta o TimescaleDB — single source no gerador.
+  `institution_configs.institution_name` é a fonte do dictionary do ClickHouse
+  (Sprint 04).
+- **Chaves `bigint GENERATED ALWAYS AS IDENTITY`** (contraste com o UUID do schema
+  moderno). É um "cheiro de legado" deliberado e tem consequência real na migração:
+  **sequências de IDENTITY precisam de reconciliação no cutover** (ver
+  `migration-analysis.md`).
+- **PII confinada a `users`** (`document`, `full_name`) — mesmo princípio de vault da
+  Sprint 02 (esquecimento LGPD é `UPDATE`/`DELETE` indexado por id).
+- **FKs sem índice no schema base**, de propósito: o Postgres **não** indexa FK
+  automaticamente, então o "antes" do `EXPLAIN` mostra o custo real; os índices de
+  apoio entram pós-seed (`make index-legado`, `06_indexes_legacy.sql`).
+
+## Story 3.2 — Relatório de contas ativas por instituição
+
+`report_active_accounts.sql` — agrega contas ativas, saldo total/médio por
+`(instituição, tipo)`. Índice: `idx_accounts_active_cover` — **parcial**
+(`status='active'`) + **cobertura** (`INCLUDE balance`) em `(institution_code,
+account_type)`.
+
+| Cenário | Plano | Buffers | Tempo |
+|---|---|---:|---:|
+| Relatório completo — ANTES (sem índice) | Seq Scan + HashAggregate + Sort | 488 | 33,6 ms |
+| Relatório completo — DEPOIS (com índice) | **Seq Scan mantido** (planner ignora o índice) | 488 | 17,5 ms |
+| Drill-down 1 instituição — DEPOIS | **Index Only Scan** (`Heap Fetches: 0`) | **25** | **1,0 ms** |
+
+**Leitura honesta:** para o relatório completo o planner **corretamente mantém o Seq
+Scan** — `status='active'` cobre 93% das linhas (predicado não seletivo) e a relação
+tem só ~488 páginas, então varrer o índice custaria páginas equivalentes com I/O
+aleatório. **Indexar por reflexo seria anti-padrão.** O índice paga no **caminho de
+acesso seletivo** (drill-down por instituição): aí vira `Index Only Scan` com
+`Heap Fetches: 0`, **488 → 25 buffers** e **33,6 → 1,0 ms**.
+
+Drill-down reproduzível:
+```sql
+EXPLAIN (ANALYZE, BUFFERS)
+SELECT a.account_type, count(*), round(sum(a.balance),2), round(avg(a.balance),2)
+FROM accounts a
+WHERE a.institution_code = '00000000' AND a.status = 'active'
+GROUP BY a.account_type;
+```
+
+## Story 3.3 — Lookup operacional (join de 5 tabelas)
+
+`config_lookup.sql` — contas ativas acima do limite diário, em instituições ativas
+que liquidam em **D+1**, com seu **acquirer** ativo:
+`institution_configs ⋈ accounts ⋈ users ⋈ account_limits ⋈ institution_partners`.
+Índices de FK: `idx_accounts_institution`, `idx_accounts_user`,
+`idx_partners_institution`.
+
+| Cenário | Plano (driver) | Buffers | Tempo |
+|---|---|---:|---:|
+| Multi-instituição — ANTES | 4× Hash Join + Seq Scan accounts (36 k) | 1.216 | 22,9 ms |
+| Multi-instituição — DEPOIS | **Nested Loop** dirigido pelas 12 D+1 + **Bitmap Index Scan** em accounts | 4.711 | 19,5 ms |
+| Drill-down 1 instituição — DEPOIS | Nested Loop + Bitmap Index Scan (`Heap Blocks 467`) + `users_pkey` | — | 13,6 ms |
+
+**Leitura honesta:** com `idx_accounts_institution` o planner **pivota** do Hash Join
+(Seq Scan de accounts) para um **Nested Loop dirigido pelas 12 instituições D+1**,
+com `Bitmap Index Scan` em accounts. Em **39 k linhas residentes em cache** o ganho é
+de **plano/escala, não de buffers brutos** — os buffers até sobem (re-leitura por
+instituição no bitmap). O valor do índice é o **caminho de acesso**: no drill-down de
+uma instituição, o `Bitmap Index Scan` lê só **~467 páginas** das contas daquela
+instituição em vez de varrer as 39 k — e cresce com o volume / com filtros mais
+estreitos. A FK `accounts.user_id` indexada sustenta o `Index Scan using users_pkey`
+no laço.
+
+**Princípio transversal (Sprint 03):** em relação pequena e cache-resident, **o
+planner está certo ao preferir Seq Scan/Hash Join** para varreduras amplas; índices
+servem **acesso seletivo**. Documentar *por que um índice não é usado* é tão sênior
+quanto exibir o ganho quando ele é.
+
+## Índices criados nesta sprint (justificativa)
+
+| Índice | Tabela | Para | Por quê / ordem |
+|---|---|---|---|
+| `idx_accounts_active_cover` (parcial + cobertura) | accounts | Q3.2 | `(institution_code, account_type) INCLUDE (balance) WHERE status='active'`: Index Only Scan no drill-down |
+| `idx_accounts_institution` | accounts | Q3.3 | FK crua; dirige o join a partir das instituições filtradas (Bitmap Index Scan) |
+| `idx_accounts_user` | accounts | Q3.3 | FK crua; sustenta o join accounts↔users |
+| `idx_partners_institution` | institution_partners | Q3.3 | FK crua; join partners↔configs |
+
+`ANALYZE` rodado após o seed (no `run_legacy.py`) e após os índices (`make
+analyze-legado`) — sem estatísticas atualizadas o planner decide errado.
+
+## Migração (Story 3.4)
+
+`migration-analysis.md`: opções (EC2 · **RDS Multi-AZ** · Aurora), matriz de
+critérios e **recomendação de RDS Multi-AZ** para legado de referência/baixo volume
+(Aurora só com gatilho de escala de leitura/DR). Estratégia de **downtime mínimo**
+(replicação lógica nativa › AWS DMS › Blue/Green), **runbook de 72h** e
+**riscos/rollback** — com destaque para a **reconciliação de sequências/IDENTITY**,
+consequência direta da decisão de chaves deste schema.
