@@ -18,13 +18,13 @@ Réplica autocontida da plataforma de dados da Trio: **3 bancos + observabilidad
 ```bash
 cp .env.example .env
 docker compose up -d --wait      # sobe e espera todos ficarem healthy
-./scripts/smoke-test.sh          # valida os 5 serviços
+./scripts/smoke-test.sh          # valida os 6 serviços
 
 # Equivalente com make:
 make up && make smoke
 ```
 
-`docker compose ps` deve mostrar os 5 serviços `healthy`.
+`docker compose ps` deve mostrar os 6 serviços `healthy`.
 
 ## Serviços
 
@@ -39,6 +39,7 @@ Versões conforme o ambiente fornecido pelo escopo (Desafio Técnico §2.2). A e
 | ClickHouse | `clickhouse/clickhouse-server:latest` | `8123` (HTTP) / `9000` (nativo) | `trio_analytics` | Motor analítico |
 | Grafana | `grafana/grafana:latest` | `3000` | — | Dashboards (admin/admin) |
 | API | FastAPI + Uvicorn (`./desafio-1/api`) | `8000` | — | ClickHouse servindo aplicação (RF-3.5) |
+| Pipeline | Python (`./desafio-2/pipeline`) | — | — | Micro-batch idempotente TimescaleDB → ClickHouse (RF-4.x) |
 
 ## Conexões
 
@@ -64,7 +65,7 @@ Atalhos: `make psql-ts`, `make psql-legado`, `make ch`.
 | Alvo | O que faz |
 |---|---|
 | `make up` | Sobe e aguarda todos healthy (`up -d --wait`) |
-| `make smoke` | Roda o smoke test dos 5 serviços |
+| `make smoke` | Roda o smoke test dos 6 serviços |
 | `make ps` / `make logs` | Status/health · logs em tempo real |
 | `make down` | Derruba containers (**mantém** dados) |
 | `make down-clean` | Derruba e **apaga** volumes (re-roda `init/`) |
@@ -73,15 +74,16 @@ Atalhos: `make psql-ts`, `make psql-legado`, `make ch`.
 | `make migrate` · `seed` · `index` · `queries` | TimescaleDB (Sprint 01–02): schema → seed 10M → índices → Q1–Q4 |
 | `make migrate-legado` · `seed-legado` · `index-legado` · `queries-legado` | Legado (Sprint 03): schema → seed → índices → queries |
 | `make migrate-ch` · `seed-ch` · `optimize-ch` · `queries-ch` | ClickHouse (Sprint 04): tabela+MVs+dictionary → carga → OPTIMIZE FINAL → flagship/dictGet |
+| `make migrate-pipeline` · `pipeline-once` · `pipeline-refs` · `pipeline-mutation-demo` | Pipelines (Sprint 05): tabelas de controle → sync TS→CH idempotente → refresh de referência → demo de mutação |
 
 ## Estrutura
 
 ```
 trio-data-challenge/
-├── docker-compose.yml          # 5 serviços, healthchecks, tuning, log rotation
+├── docker-compose.yml          # 6 serviços, healthchecks, tuning, log rotation
 ├── .env.example                # credenciais de dev (copie para .env)
 ├── Makefile                    # atalhos de operação
-├── scripts/smoke-test.sh       # validação dos 5 serviços (usada também no CI)
+├── scripts/smoke-test.sh       # validação dos 6 serviços (usada também no CI)
 ├── init/                       # SQL de bootstrap (só roda em volume vazio)
 │   ├── timescaledb/  · postgres-legado/  · clickhouse/
 ├── desafio-1/                  # Performance e tuning (schemas[/legacy,/clickhouse], seed, queries[/legacy,/clickhouse], api)

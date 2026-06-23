@@ -241,6 +241,50 @@ services:
           memory: 512M
 
   # ===========================================================================
+  #  Pipeline principal — micro-batch idempotente TimescaleDB -> ClickHouse
+  #  (Desafio 2, RF-4.1/4.2/4.3). Serviço de LONGA DURAÇÃO (loop contínuo, poll):
+  #  lê por watermark derivado COALESCE(settled_at, created_at) e deduplica via
+  #  ReplacingMergeTree. Requer `make migrate-pipeline` (tabelas de controle);
+  #  enquanto não houver schema, espera com backoff (fica healthy via heartbeat).
+  #  Demonstração determinística: `make pipeline-once`.
+  # ===========================================================================
+  pipeline:
+    build: ./desafio-2/pipeline
+    image: trio-pipeline:local
+    container_name: trio-pipeline
+    restart: unless-stopped
+    logging: *default-logging
+    environment:
+      <<: *pg-common
+      PGHOST: timescaledb
+      PGPORT: "5432"
+      PGDATABASE: trio_transactions
+      CH_HOST: clickhouse
+      CH_HTTP_PORT: "8123"
+      CH_DATABASE: trio_analytics
+      CLICKHOUSE_USER: ${CLICKHOUSE_USER:-trio}
+      CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD:-trio2024}
+      PIPELINE_POLL_S: ${PIPELINE_POLL_S:-10}
+      PIPELINE_BATCH: ${PIPELINE_BATCH:-50000}
+    depends_on:
+      timescaledb:
+        condition: service_healthy
+      clickhouse:
+        condition: service_healthy
+    healthcheck:
+      # Heartbeat tocado no topo de cada ciclo/batch (antes do DB) -> healthy mesmo
+      # aguardando o schema ou durante backfills longos. Vivo se tocado há < 60s.
+      test: ["CMD-SHELL", "python -c \"import os,time,sys; sys.exit(0 if os.path.exists('/tmp/pipeline.heartbeat') and time.time()-os.path.getmtime('/tmp/pipeline.heartbeat')<60 else 1)\""]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+
+  # ===========================================================================
   #  Seeder — gerador/carga de dados sintéticos do Desafio 1 (one-shot)
   #  NÃO sobe no `docker compose up` (profile `tools`). Executar via:
   #    docker compose --profile tools run --rm seeder      (alvo `make seed`)
@@ -319,6 +363,34 @@ services:
       SEED_WINDOW_DAYS: ${SEED_WINDOW_DAYS:-365}
       SEED_END_DATE: ${SEED_END_DATE:-2026-06-21}
     depends_on:
+      clickhouse:
+        condition: service_healthy
+
+  # ===========================================================================
+  #  Pipeline de referência — full-refresh PostgreSQL legado -> ClickHouse — one-shot
+  #  (Desafio 2, RF-4.4). REUSA a imagem trio-pipeline:local (entrypoint
+  #  sync_pg_refs.py): materializa ref_institutions + SYSTEM RELOAD DICTIONARY.
+  #  Executar via: docker compose --profile tools run --rm pipeline-refs  (make pipeline-refs)
+  # ===========================================================================
+  pipeline-refs:
+    build: ./desafio-2/pipeline
+    image: trio-pipeline:local
+    profiles: ["tools"]
+    logging: *default-logging
+    command: ["python", "sync_pg_refs.py", "--once"]
+    environment:
+      <<: *pg-common
+      PGHOST: postgres-legado
+      PGPORT: "5432"
+      PGDATABASE: trio_legado
+      CH_HOST: clickhouse
+      CH_HTTP_PORT: "8123"
+      CH_DATABASE: trio_analytics
+      CLICKHOUSE_USER: ${CLICKHOUSE_USER:-trio}
+      CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD:-trio2024}
+    depends_on:
+      postgres-legado:
+        condition: service_healthy
       clickhouse:
         condition: service_healthy
 

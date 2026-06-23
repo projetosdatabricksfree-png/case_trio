@@ -10,7 +10,8 @@ COMPOSE := docker compose
         migrate seed seed-smoke index analyze sanity \
         caggs policies index-s2 queries \
         migrate-legado seed-legado index-legado analyze-legado queries-legado \
-        migrate-ch seed-ch seed-ch-smoke optimize-ch queries-ch
+        migrate-ch seed-ch seed-ch-smoke optimize-ch queries-ch \
+        migrate-pipeline pipeline-once pipeline-refs pipeline-mutation-demo
 
 # psql não-interativo no TimescaleDB (lê SQL do stdin).
 PSQL_TS := $(COMPOSE) exec -T timescaledb psql -v ON_ERROR_STOP=1 -U $${POSTGRES_USER:-trio} -d trio_transactions
@@ -40,7 +41,7 @@ ps: ## Mostra o status/health dos serviços
 logs: ## Segue os logs de todos os serviços (Ctrl-C para sair)
 	$(COMPOSE) logs -f
 
-smoke: ## Roda o smoke test (valida os 4 serviços)
+smoke: ## Roda o smoke test (valida os 6 serviços)
 	./scripts/smoke-test.sh
 
 lint: ## Valida o compose e roda linters disponíveis localmente
@@ -170,3 +171,24 @@ queries-ch: ## Roda as queries do ClickHouse (flagship sub-segundo, dictGet, MVs
 		printf '\n=== %s ===\n' "$$f"; \
 		$(CH_Q) < "$$f"; \
 	done
+
+# ----------------------------------------------------------------------------
+#  Sprint 05 — Pipelines: controle (CH) + leitura incremental (TS), sync e demos
+# ----------------------------------------------------------------------------
+migrate-pipeline: ## Cria as tabelas de controle do pipeline (CH) + índice de leitura (TS)
+	@for f in desafio-2/pipeline/schema/0[0-3]_*.sql; do \
+		printf '→ %s\n' "$$f"; \
+		$(CH_Q) < "$$f" || exit 1; \
+	done
+	@printf '→ %s (TimescaleDB)\n' "desafio-2/pipeline/schema/10_ts_pipeline_index.sql"
+	@$(PSQL_TS) < desafio-2/pipeline/schema/10_ts_pipeline_index.sql || exit 1
+	@echo "migrate-pipeline: OK"
+
+pipeline-once: ## Roda o pipeline principal uma vez (drena TS -> CH; idempotente)
+	$(COMPOSE) run --rm --no-deps -T pipeline python sync_ts_to_ch.py --once
+
+pipeline-refs: ## Full-refresh PostgreSQL legado -> CH (ref_institutions) + reload do dict
+	$(COMPOSE) --profile tools run --rm pipeline-refs
+
+pipeline-mutation-demo: ## Demonstra mutação pending -> settled refletida no CH (FINAL)
+	./scripts/pipeline-mutation-demo.sh

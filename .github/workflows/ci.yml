@@ -47,7 +47,7 @@ jobs:
         working-directory: ${{ env.PROJECT_DIR }}
         run: |
           python3 -m pip install --quiet --user ruff
-          python3 -m ruff check desafio-1/seed
+          python3 -m ruff check desafio-1/seed desafio-2/pipeline
 
   integration:
     name: Integration (compose up + smoke)
@@ -176,6 +176,44 @@ jobs:
           curl -fsS "http://localhost:8000/transactions/volume/realtime?window_minutes=1440" \
             | grep -q '"count"' || { echo "FAIL: API não retornou JSON esperado"; exit 1; }
           echo "sprint 04 assertions: OK"
+
+      - name: Sprint 05 — Pipelines (TS -> CH idempotente, mutação, refs, DLQ)
+        working-directory: ${{ env.PROJECT_DIR }}
+        env:
+          CLICKHOUSE_USER: trio
+          CLICKHOUSE_PASSWORD: trio2024
+        run: |
+          # Tabelas de controle (CH) + índice de mutação (TS). Origem (TS) já semeada
+          # (smoke) e destino (CH) migrado nos passos anteriores. Para o serviço
+          # contínuo ANTES das asserções -> contagens determinísticas.
+          docker compose stop pipeline
+          make migrate-pipeline
+          make pipeline-once    # 1ª drenagem (insert + mutate)
+          n1=$(docker compose exec -T clickhouse clickhouse-client --user trio --password trio2024 \
+            -d trio_analytics -q "SELECT count() FROM transactions FINAL")
+          make pipeline-once    # 2ª: idempotente -> contagem (FINAL) não muda
+          n2=$(docker compose exec -T clickhouse clickhouse-client --user trio --password trio2024 \
+            -d trio_analytics -q "SELECT count() FROM transactions FINAL")
+          echo "final_after_run1=$n1 final_after_run2=$n2"
+          test "$n1" = "$n2" || { echo "FAIL: pipeline não idempotente (contagem mudou)"; exit 1; }
+          make pipeline-refs              # PG -> CH ref_institutions + SYSTEM RELOAD DICTIONARY
+          make pipeline-mutation-demo     # pending -> settled refletido no CH (valida internamente)
+          docker compose run --rm --no-deps -T pipeline python sync_ts_to_ch.py --demo-dlq
+          # Asserções agregadas (IFS=tab: o nome da instituição tem espaços).
+          IFS=$'\t' read -r refs dname runs_ok dlq < <(docker compose exec -T clickhouse \
+            clickhouse-client --user trio --password trio2024 -d trio_analytics -q "
+              SELECT
+                (SELECT count() FROM ref_institutions),
+                (SELECT dictGet('trio_analytics.dict_institutions','institution_name','00000000')),
+                (SELECT count() FROM pipeline_runs WHERE pipeline='ts_to_ch' AND status='ok'),
+                (SELECT count() FROM pipeline_dlq)
+              FORMAT TSV")
+          echo "ref_institutions=$refs dict='$dname' runs_ok=$runs_ok dlq=$dlq"
+          test "$refs" -ge 1                      || { echo "FAIL: ref_institutions vazia"; exit 1; }
+          test "$dname" = "Banco do Brasil S.A."  || { echo "FAIL: dictGet após reload"; exit 1; }
+          test "$runs_ok" -ge 1                    || { echo "FAIL: sem run 'ok' em pipeline_runs"; exit 1; }
+          test "$dlq" -ge 1                        || { echo "FAIL: DLQ vazia após demo"; exit 1; }
+          echo "sprint 05 assertions: OK"
 
       - name: Diagnostics on failure
         if: failure()

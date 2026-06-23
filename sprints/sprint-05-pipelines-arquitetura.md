@@ -17,12 +17,12 @@ O pipeline é o requisito de aceitação mais crítico do Desafio 2: *"Pelo meno
 
 ## Definition of Done da Sprint
 
-- [ ] Pipeline TimescaleDB → ClickHouse roda end-to-end no compose, idempotente.
-- [ ] Falhas tratadas (retry, dead-letter, logging estruturado); lag/throughput observáveis.
-- [ ] Mutação de status (pending → settled) refletida corretamente no ClickHouse, demonstrada.
-- [ ] Pipeline secundário PostgreSQL → ClickHouse alimentando os dictionaries.
-- [ ] Diagrama arquitetural completo (origem → consumo) com componentes AWS e SLAs.
-- [ ] ADR de 1–2 páginas com trade-offs, plano de escala 10x e visão cloud-native.
+- [x] Pipeline TimescaleDB → ClickHouse roda end-to-end no compose, idempotente.
+- [x] Falhas tratadas (retry, dead-letter, logging estruturado); lag/throughput observáveis.
+- [x] Mutação de status (pending → settled) refletida corretamente no ClickHouse, demonstrada.
+- [x] Pipeline secundário PostgreSQL → ClickHouse alimentando os dictionaries.
+- [x] Diagrama arquitetural completo (origem → consumo) com componentes AWS e SLAs.
+- [x] ADR de 1–2 páginas com trade-offs, plano de escala 10x e visão cloud-native.
 
 ---
 
