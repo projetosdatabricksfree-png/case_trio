@@ -108,6 +108,35 @@ jobs:
           test "$cb" -ge 1 || { echo "FAIL: CAgg B não materializou"; exit 1; }
           echo "sprint 02 assertions: OK"
 
+      - name: Sprint 03 — Legado (schema, seed, índices & queries)
+        working-directory: ${{ env.PROJECT_DIR }}
+        run: |
+          make migrate-legado
+          make seed-legado    # reusa a imagem trio-seeder:local (já buildada)
+          make index-legado
+          make analyze-legado
+          make queries-legado # ON_ERROR_STOP valida execução das 2 queries
+          # Asserções: tabelas populadas, toda conta tem config (FK coerente) e
+          # ambas as queries do legado retornam linhas.
+          read -r usr acc orphan q32 q33 < <(docker compose exec -T postgres-legado \
+            psql -U "${POSTGRES_USER:-trio}" -d trio_legado -tAF' ' -c "
+              SELECT
+                (SELECT count(*) FROM users),
+                (SELECT count(*) FROM accounts),
+                (SELECT count(*) FROM accounts a
+                   LEFT JOIN institution_configs ic ON ic.institution_code = a.institution_code
+                   WHERE ic.institution_code IS NULL),
+                (SELECT count(*) FROM accounts WHERE status='active'),
+                (SELECT count(*) FROM institution_configs WHERE active AND settlement_window='D+1');
+            ")
+          echo "users=$usr accounts=$acc orphan_accounts=$orphan active_accounts=$q32 d1_configs=$q33"
+          test "$usr" -ge 1     || { echo "FAIL: sem users"; exit 1; }
+          test "$acc" -ge 1     || { echo "FAIL: sem accounts"; exit 1; }
+          test "$orphan" -eq 0  || { echo "FAIL: accounts sem institution_config (FK incoerente)"; exit 1; }
+          test "$q32" -ge 1     || { echo "FAIL: Q3.2 não retornaria linhas"; exit 1; }
+          test "$q33" -ge 1     || { echo "FAIL: Q3.3 não retornaria linhas"; exit 1; }
+          echo "sprint 03 assertions: OK"
+
       - name: Diagnostics on failure
         if: failure()
         working-directory: ${{ env.PROJECT_DIR }}

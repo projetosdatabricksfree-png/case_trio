@@ -66,6 +66,8 @@ Atalhos: `make psql-ts`, `make psql-legado`, `make ch`.
 | `make down-clean` | Derruba e **apaga** volumes (re-roda `init/`) |
 | `make reset` | `down-clean` → `up` → `smoke` (recria do zero e valida) |
 | `make lint` | Valida o compose + linters locais |
+| `make migrate` · `seed` · `index` · `queries` | TimescaleDB (Sprint 01–02): schema → seed 10M → índices → Q1–Q4 |
+| `make migrate-legado` · `seed-legado` · `index-legado` · `queries-legado` | Legado (Sprint 03): schema → seed → índices → queries |
 
 ## Estrutura
 
@@ -77,7 +79,7 @@ trio-data-challenge/
 ├── scripts/smoke-test.sh       # validação dos 4 serviços (usada também no CI)
 ├── init/                       # SQL de bootstrap (só roda em volume vazio)
 │   ├── timescaledb/  · postgres-legado/  · clickhouse/
-├── desafio-1/                  # Performance e tuning (schemas, seed, queries, api)
+├── desafio-1/                  # Performance e tuning (schemas[/legacy], seed, queries[/legacy], api)
 ├── desafio-2/                  # Pipelines e arquitetura (pipeline, diagrams, ADR)
 ├── desafio-3/                  # Operação e observabilidade
 │   └── grafana/provisioning/   # datasources (✅) + dashboards/alertas (Sprint 06)

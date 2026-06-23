@@ -8,10 +8,14 @@ COMPOSE := docker compose
 .DEFAULT_GOAL := help
 .PHONY: help up down down-clean ps logs smoke lint psql-ts psql-legado ch reset \
         migrate seed seed-smoke index analyze sanity \
-        caggs policies index-s2 queries
+        caggs policies index-s2 queries \
+        migrate-legado seed-legado index-legado analyze-legado queries-legado
 
 # psql não-interativo no TimescaleDB (lê SQL do stdin).
 PSQL_TS := $(COMPOSE) exec -T timescaledb psql -v ON_ERROR_STOP=1 -U $${POSTGRES_USER:-trio} -d trio_transactions
+
+# psql não-interativo no PostgreSQL legado (lê SQL do stdin).
+PSQL_LEGADO := $(COMPOSE) exec -T postgres-legado psql -v ON_ERROR_STOP=1 -U $${POSTGRES_USER:-trio} -d trio_legado
 
 help: ## Lista os alvos disponíveis
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | \
@@ -106,4 +110,30 @@ queries: ## Roda Q1–Q4 + percentis exatos + gapfill (Sprint 02)
 	          desafio-1/queries/timeseries_gapfill_48h.sql; do \
 		printf '\n=== %s ===\n' "$$f"; \
 		$(PSQL_TS) < "$$f"; \
+	done
+
+# ----------------------------------------------------------------------------
+#  Sprint 03 — PostgreSQL legado: schema, seed e queries
+# ----------------------------------------------------------------------------
+migrate-legado: ## Aplica o schema do legado (DDL idempotente 00..05) no postgres-legado
+	@for f in desafio-1/schemas/legacy/0[0-5]_*.sql; do \
+		printf '→ %s\n' "$$f"; \
+		$(PSQL_LEGADO) < "$$f" || exit 1; \
+	done
+	@echo "migrate-legado: OK"
+
+seed-legado: ## Popula o legado (users/accounts/configs/partners/limits). Ex.: SEED_USERS=30000
+	$(COMPOSE) --profile tools run --rm seeder-legado
+
+index-legado: ## Cria os índices de apoio do legado (rodar PÓS-seed)
+	$(PSQL_LEGADO) < desafio-1/schemas/legacy/06_indexes_legacy.sql
+	@echo "index-legado: OK"
+
+analyze-legado: ## Atualiza estatísticas do planner no legado (ANALYZE)
+	$(PSQL_LEGADO) -c "ANALYZE;"
+
+queries-legado: ## Roda as queries do legado (relatório de contas + lookup de config)
+	@for f in desafio-1/queries/legacy/*.sql; do \
+		printf '\n=== %s ===\n' "$$f"; \
+		$(PSQL_LEGADO) < "$$f"; \
 	done
