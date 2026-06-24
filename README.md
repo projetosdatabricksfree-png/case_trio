@@ -91,11 +91,6 @@ Mapa de cada parte do desafio → artefato → como rodar/demonstrar (caminhos r
 - **Versões = ambiente fornecido pelo escopo** (ClickHouse `latest` intencional); pinagem por digest
   fica para produção. → [ADR-0001](desafioengenheirodedadostrio/trio-data-challenge/docs/adr/ADR-0001-image-versioning.md)
 
-## Apresentação ao vivo
-
-Roteiro de 30–45 min (terminal + dashboards) + respostas para as perguntas-âncora:
-[`docs/presentation-script.md`](desafioengenheirodedadostrio/trio-data-challenge/docs/presentation-script.md).
-
 ## Estrutura do repositório
 
 ```

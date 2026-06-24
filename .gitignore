@@ -38,3 +38,6 @@ Thumbs.db
 
 # --- Ferramentas locais -----------------------------------------------------
 .claude/settings.local.json
+
+# --- Material de estudo pessoal (mantido só no disco, fora do repo) ----------
+desafioengenheirodedadostrio/trio-data-challenge/docs/presentation-script.md
