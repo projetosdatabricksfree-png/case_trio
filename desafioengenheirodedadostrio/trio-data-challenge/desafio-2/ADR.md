@@ -98,10 +98,12 @@ evolui para **segundos** com CDC, sem reescrever o contrato de dados.
   carga de leitura do pipeline do OLTP.
 
 ### 3. Onde entra o legado PostgreSQL/Aurora nessa evolução?
-A referência é **desacoplada por connection string/env**. Migrar PostgreSQL → **Aurora** (via
-**AWS DMS**) muda **apenas o endpoint** (Aurora é wire-compatible) — o pipeline de referência **não
-muda de lógica**. Aurora **Global Database** cobre DR. Esse desacoplamento é um princípio de design,
-não um acidente.
+A referência é **desacoplada por connection string/env**. O destino gerenciado segue a recomendação da
+[`migration-analysis.md`](../desafio-1/migration-analysis.md): **RDS PostgreSQL Multi-AZ** para o legado
+de **referência/baixo volume** de hoje, com **Aurora** reservado aos gatilhos de escala/DR (muitas
+réplicas de leitura, Global Database cross-region). Em **qualquer** dos dois, migrar muda **apenas o
+endpoint** (wire-compatible, via **AWS DMS** ou replicação lógica) — o pipeline de referência **não muda
+de lógica**. Esse desacoplamento é um princípio de design, não um acidente.
 
 ### 4. Quais serviços AWS para resiliência e escala?
 - **Amazon MSK** (CDC/streaming), **AWS DMS** (migração + CDC inicial).

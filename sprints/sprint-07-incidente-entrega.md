@@ -17,11 +17,11 @@
 
 ## Definition of Done da Sprint
 
-- [ ] `incident-response.md` completo (investigação, 5+ hipóteses ordenadas, resolução, pós-incidente, comunicação).
-- [ ] README raiz polido (setup, arquitetura, índice de entregáveis, como demonstrar cada parte).
-- [ ] REPORTs e docs revisados e consistentes entre si.
-- [ ] Repositório organizado conforme estrutura sugerida; `docker compose up -d` validado do zero.
-- [ ] Roteiro de apresentação (demo script) cobrindo as perguntas esperadas.
+- [x] `incident-response.md` completo (investigação, 5+ hipóteses ordenadas, resolução, pós-incidente, comunicação).
+- [x] README raiz polido (setup, arquitetura, índice de entregáveis, como demonstrar cada parte).
+- [x] REPORTs e docs revisados e consistentes entre si.
+- [x] Repositório organizado conforme estrutura sugerida; `docker compose up -d` validado do zero.
+- [x] Roteiro de apresentação (demo script) cobrindo as perguntas esperadas.
 
 ---
 

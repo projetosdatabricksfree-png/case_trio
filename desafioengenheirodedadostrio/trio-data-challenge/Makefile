@@ -12,7 +12,7 @@ COMPOSE := docker compose
         migrate-legado seed-legado index-legado analyze-legado queries-legado \
         migrate-ch seed-ch seed-ch-smoke optimize-ch queries-ch \
         migrate-pipeline pipeline-once pipeline-refs pipeline-mutation-demo \
-        backup recovery-demo runbook-storage-check
+        backup recovery-demo runbook-storage-check incident-demo
 
 # psql não-interativo no TimescaleDB (lê SQL do stdin).
 PSQL_TS := $(COMPOSE) exec -T timescaledb psql -v ON_ERROR_STOP=1 -U $${POSTGRES_USER:-trio} -d trio_transactions
@@ -206,3 +206,9 @@ recovery-demo: ## Demo de recovery do TimescaleDB (perda -> restore -> validaç�
 runbook-storage-check: ## Validação READ-ONLY do runbook de storage (não altera nada)
 	$(PSQL_TS) < desafio-3/runbook-storage-check.sql
 	@echo "runbook-storage-check: OK"
+
+# ----------------------------------------------------------------------------
+#  Sprint 07 — Incidente & Entrega: demo reproduzível do SEV-1 (volume zero)
+# ----------------------------------------------------------------------------
+incident-demo: ## Reproduz o incidente SEV-1 (pipeline cortado -> CH stale -> resolve -> CH==TS)
+	bash scripts/incident-demo.sh

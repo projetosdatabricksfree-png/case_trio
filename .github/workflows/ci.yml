@@ -240,6 +240,20 @@ jobs:
           test -s "$(ls -1 desafio-3/backup/artifacts/trio_analytics_*.zip    | head -1)" || { echo "FAIL: backup CH"; exit 1; }
           echo "sprint 06 assertions: OK"
 
+      - name: Sprint 07 — Incidente SEV-1 (demo reproduzível volume zero -> resolução)
+        working-directory: ${{ env.PROJECT_DIR }}
+        env:
+          CLICKHOUSE_USER: trio
+          CLICKHOUSE_PASSWORD: trio2024
+        run: |
+          # Reproduz o incidente: pipeline parado (já parado desde o passo Sprint 05) ->
+          # novas transações no TS não chegam ao CH (dashboards Pix stale) -> "resolução"
+          # drena o pipeline -> assert interno CH max(created_at) == TS max(created_at).
+          make incident-demo
+          # Entregável de raciocínio presente e não-vazio.
+          test -s desafio-3/incident-response.md || { echo "FAIL: incident-response.md ausente"; exit 1; }
+          echo "sprint 07 assertions: OK"
+
       - name: Diagnostics on failure
         if: failure()
         working-directory: ${{ env.PROJECT_DIR }}
