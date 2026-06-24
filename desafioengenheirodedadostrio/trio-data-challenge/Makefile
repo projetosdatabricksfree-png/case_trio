@@ -11,7 +11,8 @@ COMPOSE := docker compose
         caggs policies index-s2 queries \
         migrate-legado seed-legado index-legado analyze-legado queries-legado \
         migrate-ch seed-ch seed-ch-smoke optimize-ch queries-ch \
-        migrate-pipeline pipeline-once pipeline-refs pipeline-mutation-demo
+        migrate-pipeline pipeline-once pipeline-refs pipeline-mutation-demo \
+        backup recovery-demo runbook-storage-check
 
 # psql não-interativo no TimescaleDB (lê SQL do stdin).
 PSQL_TS := $(COMPOSE) exec -T timescaledb psql -v ON_ERROR_STOP=1 -U $${POSTGRES_USER:-trio} -d trio_transactions
@@ -192,3 +193,16 @@ pipeline-refs: ## Full-refresh PostgreSQL legado -> CH (ref_institutions) + relo
 
 pipeline-mutation-demo: ## Demonstra mutação pending -> settled refletida no CH (FINAL)
 	./scripts/pipeline-mutation-demo.sh
+
+# ----------------------------------------------------------------------------
+#  Sprint 06 — Operação & Observabilidade: backup, recovery e runbook
+# ----------------------------------------------------------------------------
+backup: ## Backup dos 3 bancos (artefatos em desafio-3/backup/artifacts/)
+	bash desafio-3/backup/run_backups.sh
+
+recovery-demo: ## Demo de recovery do TimescaleDB (perda -> restore -> validação)
+	bash desafio-3/backup/recovery-demo.sh
+
+runbook-storage-check: ## Validação READ-ONLY do runbook de storage (não altera nada)
+	$(PSQL_TS) < desafio-3/runbook-storage-check.sql
+	@echo "runbook-storage-check: OK"

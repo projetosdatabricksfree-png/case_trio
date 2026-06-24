@@ -155,6 +155,9 @@ services:
       - clickhouse_data:/var/lib/clickhouse
       - clickhouse_logs:/var/log/clickhouse-server
       - ./init/clickhouse:/docker-entrypoint-initdb.d:ro
+      # Sprint 06: disco de backup nativo (BACKUP TO Disk). Montado como ARQUIVO
+      # ÚNICO p/ não esconder os config.d da imagem oficial (listen_host etc).
+      - ./desafio-3/clickhouse/config.d/backup_disk.xml:/etc/clickhouse-server/config.d/backup_disk.xml:ro
     ulimits:
       nofile:
         soft: 262144

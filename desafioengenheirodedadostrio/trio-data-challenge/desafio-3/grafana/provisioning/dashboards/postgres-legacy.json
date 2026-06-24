@@ -1,0 +1,134 @@
+{
+  "uid": "trio-postgres-legacy",
+  "title": "Trio · PostgreSQL Legado",
+  "tags": ["trio", "sprint-06", "postgres", "legado"],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "30s",
+  "time": { "from": "now-6h", "to": "now" },
+  "templating": { "list": [] },
+  "annotations": { "list": [] },
+  "panels": [
+    {
+      "id": 1,
+      "type": "stat",
+      "title": "Conexões",
+      "datasource": { "type": "postgres", "uid": "postgres-legado" },
+      "gridPos": { "h": 4, "w": 6, "x": 0, "y": 0 },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "postgres", "uid": "postgres-legado" },
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT count(*) AS conexoes FROM pg_stat_activity WHERE datname = 'trio_legado'"
+        }
+      ],
+      "fieldConfig": { "defaults": { "unit": "none" }, "overrides": [] },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "colorMode": "value", "textMode": "auto", "graphMode": "none" }
+    },
+    {
+      "id": 2,
+      "type": "stat",
+      "title": "Saturação de conexões",
+      "description": "Sinal pró-migração: conexões / max_connections. Saturação justifica réplicas de leitura (Aurora).",
+      "datasource": { "type": "postgres", "uid": "postgres-legado" },
+      "gridPos": { "h": 4, "w": 6, "x": 6, "y": 0 },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "postgres", "uid": "postgres-legado" },
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT round(100.0 * (SELECT count(*) FROM pg_stat_activity WHERE datname = 'trio_legado') / NULLIF((SELECT setting::numeric FROM pg_settings WHERE name = 'max_connections'), 0), 1) AS saturacao_pct"
+        }
+      ],
+      "fieldConfig": { "defaults": { "unit": "percent", "min": 0, "max": 100, "thresholds": { "mode": "absolute", "steps": [ { "color": "green", "value": null }, { "color": "yellow", "value": 70 }, { "color": "red", "value": 90 } ] } }, "overrides": [] },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "colorMode": "value", "textMode": "auto", "graphMode": "none" }
+    },
+    {
+      "id": 3,
+      "type": "stat",
+      "title": "Cache hit ratio",
+      "datasource": { "type": "postgres", "uid": "postgres-legado" },
+      "gridPos": { "h": 4, "w": 6, "x": 12, "y": 0 },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "postgres", "uid": "postgres-legado" },
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT round(100.0 * sum(blks_hit) / NULLIF(sum(blks_hit + blks_read), 0), 2) AS cache_hit_pct FROM pg_stat_database WHERE datname = 'trio_legado'"
+        }
+      ],
+      "fieldConfig": { "defaults": { "unit": "percent", "min": 0, "max": 100 }, "overrides": [] },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "colorMode": "value", "textMode": "auto", "graphMode": "none" }
+    },
+    {
+      "id": 4,
+      "type": "stat",
+      "title": "Latência média (top query)",
+      "description": "Sinal pró-migração: tempo médio crescente das queries aponta saturação de CPU/IO.",
+      "datasource": { "type": "postgres", "uid": "postgres-legado" },
+      "gridPos": { "h": 4, "w": 6, "x": 18, "y": 0 },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "postgres", "uid": "postgres-legado" },
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT round(max(mean_exec_time)::numeric, 2) AS pior_media_ms FROM pg_stat_statements"
+        }
+      ],
+      "fieldConfig": { "defaults": { "unit": "ms" }, "overrides": [] },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "colorMode": "value", "textMode": "auto", "graphMode": "none" }
+    },
+    {
+      "id": 5,
+      "type": "table",
+      "title": "Queries lentas (pg_stat_statements)",
+      "datasource": { "type": "postgres", "uid": "postgres-legado" },
+      "gridPos": { "h": 9, "w": 14, "x": 0, "y": 4 },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "postgres", "uid": "postgres-legado" },
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT round(mean_exec_time::numeric, 2) AS mean_ms, calls, round(total_exec_time::numeric, 1) AS total_ms, left(query, 80) AS query FROM pg_stat_statements WHERE query NOT ILIKE '%pg_stat_statements%' ORDER BY mean_exec_time DESC LIMIT 15"
+        }
+      ],
+      "fieldConfig": { "defaults": {}, "overrides": [] },
+      "options": { "showHeader": true }
+    },
+    {
+      "id": 6,
+      "type": "table",
+      "title": "Dead tuples / bloat estimado",
+      "datasource": { "type": "postgres", "uid": "postgres-legado" },
+      "gridPos": { "h": 9, "w": 10, "x": 14, "y": 4 },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "postgres", "uid": "postgres-legado" },
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT relname, n_live_tup, n_dead_tup, round(100.0 * n_dead_tup / NULLIF(n_live_tup + n_dead_tup, 0), 1) AS dead_pct FROM pg_stat_user_tables ORDER BY n_dead_tup DESC LIMIT 10"
+        }
+      ],
+      "fieldConfig": { "defaults": {}, "overrides": [] },
+      "options": { "showHeader": true }
+    },
+    {
+      "id": 7,
+      "type": "text",
+      "title": "Sinais pró-migração (Aurora / RDS)",
+      "gridPos": { "h": 6, "w": 24, "x": 0, "y": 13 },
+      "options": {
+        "mode": "markdown",
+        "content": "Este painel reúne os sinais que **justificariam migrar o legado** para RDS Multi-AZ / Aurora, amarrados à [`desafio-1/migration-analysis.md`](https://github.com/projetosdatabricksfree-png/case_trio):\n\n- **Saturação de conexões** → gatilho para réplicas de leitura baratas (Aurora compartilha storage).\n- **Latência média crescente** (`mean_exec_time`) → pressão de CPU/IO; Aurora/RDS escalam vertical/horizontalmente.\n- **Overhead de manutenção** (dead tuples, VACUUM, patching manual) → gerenciado no RDS/Aurora.\n\n> Recomendação atual (Sprint 03): **RDS Multi-AZ** para um legado de referência/baixo volume; Aurora só quando houver muitas réplicas de leitura, DR cross-region (Global DB) ou autoscaling de storage."
+      }
+    }
+  ]
+}

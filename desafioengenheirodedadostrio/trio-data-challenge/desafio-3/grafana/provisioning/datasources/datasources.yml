@@ -8,6 +8,7 @@ apiVersion: 1
 datasources:
   # TimescaleDB — Banco transacional principal
   - name: TimescaleDB
+    uid: timescaledb
     type: postgres
     access: proxy
     url: timescaledb:5432
@@ -27,6 +28,7 @@ datasources:
 
   # PostgreSQL Legado
   - name: PostgreSQL Legado
+    uid: postgres-legado
     type: postgres
     access: proxy
     url: postgres-legado:5432
@@ -44,6 +46,7 @@ datasources:
 
   # ClickHouse — Aplicações e consultas
   - name: ClickHouse
+    uid: clickhouse
     type: grafana-clickhouse-datasource
     access: proxy
     jsonData:
