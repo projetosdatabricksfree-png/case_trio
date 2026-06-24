@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # =============================================================================
 #  Trio Data Challenge — Smoke Test
-#  Valida que os 5 serviços subiram e estão saudáveis.
+#  Valida que os 6 serviços subiram e estão saudáveis.
 #  Uso:   ./scripts/smoke-test.sh   (ou: make smoke)
 #  Saída: 0 = tudo ok | 1 = alguma verificação falhou.
 #  Reutilizado pelo CI (.github/workflows/ci.yml, job integration).
@@ -87,7 +87,7 @@ fi
 
 # 6) Todos os containers reportam healthy
 printf "\n%sHealth dos containers:%s\n" "$BOLD" "$RESET"
-for c in trio-timescaledb trio-postgres-legado trio-clickhouse trio-grafana trio-api; do
+for c in trio-timescaledb trio-postgres-legado trio-clickhouse trio-grafana trio-api trio-pipeline; do
   status="$(docker inspect \
     --format '{{if .State.Health}}{{.State.Health.Status}}{{else}}no-healthcheck{{end}}' \
     "$c" 2>/dev/null || echo "absent")"

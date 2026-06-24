@@ -1,0 +1,7 @@
+# Pipelines do Desafio 2 (TimescaleDB/PostgreSQL -> ClickHouse). Imagem separada
+# do seeder: só precisa do driver Postgres e do cliente ClickHouse — sem numpy/
+# Faker/pandas (psycopg devolve datetime/Decimal nativos, então o insert
+# column-oriented do clickhouse-connect funciona direto). Versões em faixa;
+# pinagem por digest fica como recomendação de produção (ver ADR).
+psycopg[binary]>=3.2,<4
+clickhouse-connect>=0.7,<1
