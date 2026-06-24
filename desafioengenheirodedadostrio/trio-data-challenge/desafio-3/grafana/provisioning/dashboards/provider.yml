@@ -1,0 +1,18 @@
+# =============================================================================
+#  Grafana — Provider de Dashboards (Sprint 06 · Stories 6.4/6.5)
+#  Carrega os dashboards JSON versionados deste diretório na pasta "Trio".
+#  Montado pelo compose em /etc/grafana/provisioning/dashboards.
+# =============================================================================
+apiVersion: 1
+
+providers:
+  - name: Trio
+    orgId: 1
+    folder: Trio
+    type: file
+    disableDeletion: false
+    updateIntervalSeconds: 30
+    allowUiUpdates: true
+    options:
+      path: /etc/grafana/provisioning/dashboards
+      foldersFromFilesStructure: false

@@ -75,6 +75,7 @@ Atalhos: `make psql-ts`, `make psql-legado`, `make ch`.
 | `make migrate-legado` · `seed-legado` · `index-legado` · `queries-legado` | Legado (Sprint 03): schema → seed → índices → queries |
 | `make migrate-ch` · `seed-ch` · `optimize-ch` · `queries-ch` | ClickHouse (Sprint 04): tabela+MVs+dictionary → carga → OPTIMIZE FINAL → flagship/dictGet |
 | `make migrate-pipeline` · `pipeline-once` · `pipeline-refs` · `pipeline-mutation-demo` | Pipelines (Sprint 05): tabelas de controle → sync TS→CH idempotente → refresh de referência → demo de mutação |
+| `make backup` · `recovery-demo` · `runbook-storage-check` | Operação (Sprint 06): backup dos 3 bancos → demo de recovery validada → validação read-only do runbook de storage |
 
 ## Estrutura
 
@@ -89,7 +90,9 @@ trio-data-challenge/
 ├── desafio-1/                  # Performance e tuning (schemas[/legacy,/clickhouse], seed, queries[/legacy,/clickhouse], api)
 ├── desafio-2/                  # Pipelines e arquitetura (pipeline, diagrams, ADR)
 ├── desafio-3/                  # Operação e observabilidade
-│   └── grafana/provisioning/   # datasources (✅) + dashboards/alertas (Sprint 06)
+│   ├── backup/                 # backup dos 3 bancos + recovery-demo (✅)
+│   ├── runbook.md · alerts.md  # runbook de storage + alertas críticos (✅)
+│   └── grafana/provisioning/   # datasources + 4 dashboards + alerta PoC (✅)
 └── docs/                       # docs transversais + docs/adr/
 ```
 

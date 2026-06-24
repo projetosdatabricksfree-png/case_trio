@@ -19,11 +19,11 @@ venv/
 env/
 
 # --- Dumps / artefatos de backup (sprint 06) --------------------------------
+# Os scripts e docs em desafio-3/backup/ SÃO versionados; só os artefatos não.
+desafioengenheirodedadostrio/trio-data-challenge/desafio-3/backup/artifacts/
 *.dump
 *.sql.gz
 *.tar.gz
-desafioengenheirodedadostrio/trio-data-challenge/desafio-3/backup/*
-!desafioengenheirodedadostrio/trio-data-challenge/desafio-3/backup/.gitkeep
 
 # --- Logs / dados locais de containers --------------------------------------
 *.log

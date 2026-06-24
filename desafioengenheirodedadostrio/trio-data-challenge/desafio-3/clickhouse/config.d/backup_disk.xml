@@ -1,0 +1,30 @@
+<?xml version="1.0"?>
+<!--
+  Sprint 06 · Story 6.1 — Disco de backup nativo do ClickHouse.
+
+  Habilita `BACKUP TABLE ... TO Disk('backups', ...)` / `RESTORE` (CH 22.4+).
+  Sem este disco, o BACKUP nativo recusa o destino ("no allowed disk").
+
+  MONTAGEM: este arquivo é montado COMO ARQUIVO ÚNICO em
+  /etc/clickhouse-server/config.d/backup_disk.xml — nunca o diretório config.d
+  inteiro, que esconderia o docker_related_config.xml da imagem oficial (listen_host)
+  e quebraria a rede do container.
+
+  O destino vive dentro do volume clickhouse_data (/var/lib/clickhouse); o
+  orquestrador de backup copia o artefato para o host via `docker compose cp`.
+  PRODUÇÃO: trocar o disco local por `BACKUP TO S3(...)` + clickhouse-backup
+  (incremental, lifecycle/Glacier) — registrado em desafio-3/backup/README.md.
+-->
+<clickhouse>
+    <storage_configuration>
+        <disks>
+            <backups>
+                <type>local</type>
+                <path>/var/lib/clickhouse/backups/</path>
+            </backups>
+        </disks>
+    </storage_configuration>
+    <backups>
+        <allowed_disk>backups</allowed_disk>
+    </backups>
+</clickhouse>

@@ -17,12 +17,12 @@ Em infraestrutura de pagamentos, *"a capacidade de operar, diagnosticar e recupe
 
 ## Definition of Done da Sprint
 
-- [ ] Backup funcional implementado para TimescaleDB, PostgreSQL e ClickHouse (script roda).
-- [ ] Recovery demonstrado com timestamps e validação de contagem (antes/perda/depois).
-- [ ] Runbook do storage em 92% completo (pré-requisitos, comandos, checkpoints, rollback, comunicação).
-- [ ] 4 dashboards Grafana funcionais (TimescaleDB, ClickHouse, Pipeline, PostgreSQL legado).
-- [ ] 5+ alertas críticos definidos (métrica, threshold, severidade, ação, integração CloudWatch/SNS).
-- [ ] Pelo menos um dashboard comprovadamente consultando ClickHouse (critério mínimo do desafio).
+- [x] Backup funcional implementado para TimescaleDB, PostgreSQL e ClickHouse (script roda).
+- [x] Recovery demonstrado com timestamps e validação de contagem (antes/perda/depois).
+- [x] Runbook do storage em 92% completo (pré-requisitos, comandos, checkpoints, rollback, comunicação).
+- [x] 4 dashboards Grafana funcionais (TimescaleDB, ClickHouse, Pipeline, PostgreSQL legado).
+- [x] 5+ alertas críticos definidos (métrica, threshold, severidade, ação, integração CloudWatch/SNS).
+- [x] Pelo menos um dashboard comprovadamente consultando ClickHouse (critério mínimo do desafio).
 
 ---
 

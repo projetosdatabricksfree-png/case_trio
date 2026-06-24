@@ -215,6 +215,31 @@ jobs:
           test "$dlq" -ge 1                        || { echo "FAIL: DLQ vazia após demo"; exit 1; }
           echo "sprint 05 assertions: OK"
 
+      - name: Sprint 06 — Ops & Observabilidade (backup, recovery, runbook, dashboards, alertas)
+        working-directory: ${{ env.PROJECT_DIR }}
+        env:
+          CLICKHOUSE_USER: trio
+          CLICKHOUSE_PASSWORD: trio2024
+        run: |
+          # Backup dos 3 bancos (o orquestrador valida cada artefato e o status do CH).
+          bash desafio-3/backup/run_backups.sh
+          # Recovery do TimescaleDB: perda -> restore staging -> validação (antes == depois).
+          make recovery-demo
+          # Runbook de storage: validação READ-ONLY (não altera nada).
+          make runbook-storage-check
+          # Observabilidade provisionada (Grafana sobe com volume limpo no CI):
+          # 4 dashboards + >= 1 regra de alerta. >= 2 dashboards consultam o ClickHouse.
+          dash=$(curl -s -u admin:admin "http://localhost:3000/api/search?type=dash-db" | jq 'length')
+          rules=$(curl -s -u admin:admin "http://localhost:3000/api/v1/provisioning/alert-rules" | jq 'length')
+          echo "dashboards=$dash alert_rules=$rules"
+          test "$dash" -ge 4  || { echo "FAIL: < 4 dashboards provisionados"; exit 1; }
+          test "$rules" -ge 1 || { echo "FAIL: nenhuma regra de alerta provisionada"; exit 1; }
+          # Artefatos de backup presentes e não-vazios (um por banco).
+          test -s "$(ls -1 desafio-3/backup/artifacts/timescaledb_*.dump      | head -1)" || { echo "FAIL: backup TS"; exit 1; }
+          test -s "$(ls -1 desafio-3/backup/artifacts/postgres_legado_*.dump  | head -1)" || { echo "FAIL: backup PG"; exit 1; }
+          test -s "$(ls -1 desafio-3/backup/artifacts/trio_analytics_*.zip    | head -1)" || { echo "FAIL: backup CH"; exit 1; }
+          echo "sprint 06 assertions: OK"
+
       - name: Diagnostics on failure
         if: failure()
         working-directory: ${{ env.PROJECT_DIR }}
