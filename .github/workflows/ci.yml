@@ -29,7 +29,7 @@ jobs:
 
       - name: ShellCheck (scripts)
         working-directory: ${{ env.PROJECT_DIR }}
-        run: shellcheck scripts/*.sh
+        run: shellcheck scripts/*.sh desafio-3/backup/*.sh
 
       - name: yamllint
         run: |

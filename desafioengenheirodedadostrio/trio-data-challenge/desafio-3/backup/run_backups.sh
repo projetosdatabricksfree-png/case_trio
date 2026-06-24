@@ -51,7 +51,8 @@ if [[ -d "$ARTIFACTS_DIR" ]]; then
 fi
 
 printf "%sArtefatos atuais:%s\n" "$BOLD" "$RESET"
-ls -lh "$ARTIFACTS_DIR" 2>/dev/null | tail -n +2 | sed 's/^/  /' || true
+find "$ARTIFACTS_DIR" -maxdepth 1 -type f \( -name '*.dump' -o -name '*.zip' \) \
+  -exec du -h {} + 2>/dev/null | sed 's/^/  /' || true
 
 printf "\n"
 if [[ "$fails" -eq 0 ]]; then
