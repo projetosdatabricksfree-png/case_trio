@@ -41,11 +41,8 @@ COPY() {  # COPY <psql-\copy-command> dentro do container
     psql -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d trio_transactions -c "$1"
 }
 
-# shellcheck disable=SC2329  # invocada indiretamente pelo trap EXIT abaixo
-cleanup() {
-  docker compose exec -T timescaledb rm -f "$GRANULE" 2>/dev/null || true
-}
-trap cleanup EXIT
+# Limpeza do granule no fim (trap inline -> sem função, agrada qualquer shellcheck).
+trap 'docker compose exec -T timescaledb rm -f "$GRANULE" 2>/dev/null || true' EXIT
 
 echo "== Demo de recovery TimescaleDB (perda -> recovery seletivo de período) =="
 
