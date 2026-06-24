@@ -125,7 +125,7 @@ trio-data-challenge/
 │   ├── runbook.md · alerts.md  # runbook de storage + alertas críticos (✅)
 │   ├── incident-response.md    # resposta ao SEV-1 (make incident-demo) (✅)
 │   └── grafana/provisioning/   # datasources + 4 dashboards + alerta PoC (✅)
-└── docs/                       # ADRs + presentation-script.md + validation-checklist.md
+└── docs/                       # ADRs + validation-checklist.md
 ```
 
 ## Persistência: `down` vs `down -v`
