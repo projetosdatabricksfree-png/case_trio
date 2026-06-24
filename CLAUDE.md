@@ -15,7 +15,7 @@ O repositório tem **dois níveis** — não confunda:
 
 ## Estado Atual
 
-Apenas a **foundation (sprint 00)** está montada: compose com os 4 serviços + datasources do Grafana provisionados em `desafio-3/grafana/provisioning/datasources/` (montado pelo compose; é onde também entram dashboards/alertas do Desafio 3). Os scripts `init/{timescaledb,postgres-legado,clickhouse}/00_init.sql` são **stubs** (só habilitam extensões / `CREATE DATABASE`). **Ainda não existem**: schema das tabelas, seed, pipeline Python, nem a API. Eles serão criados nas sprints 01+ (ver `ROADMAP.md`).
+**Projeto completo (Sprints 00–07), entregue e mergeado em `main`** — os três desafios cobertos de ponta a ponta e validados no CI a cada push. No compose: os 4 serviços de dados + pipeline + API. Já existem: schema/seed/queries dos 3 bancos, pipeline idempotente TimescaleDB → ClickHouse, dashboards/alertas no Grafana (`desafio-3/grafana/provisioning/`), backup/recovery, runbook de storage e resposta ao incidente SEV-1. Os scripts `init/{timescaledb,postgres-legado,clickhouse}/00_init.sql` permanecem como **bootstrap mínimo** (extensões / `CREATE DATABASE`); o schema versionado de cada banco vive em `desafio-1/schemas/` e roda via `make` (ver `ROADMAP.md` e o índice de entregáveis no README raiz).
 
 > Os scripts `init/` só executam na **primeira criação** do container (volume vazio). Para reaplicá-los após editar: `docker compose down -v` (apaga os dados) e suba de novo.
 
@@ -25,8 +25,8 @@ Apenas a **foundation (sprint 00)** está montada: compose com os 4 serviços + 
 - Legado: **PostgreSQL 16** (`postgres:16-bookworm`, porta 5433, db `trio_legado`)
 - Analítico: **ClickHouse** (`clickhouse/clickhouse-server:latest`, porta 8123 HTTP / 9000 native, db `trio_analytics`)
 - Dashboards: **Grafana** (`grafana/grafana:latest`, porta 3000, admin/admin; datasources dos 3 bancos pré-configurados)
-- Pipeline (a implementar): **Python 3.12** (psycopg, clickhouse-connect) — micro-batch idempotente
-- API (a implementar): **FastAPI + Uvicorn**
+- Pipeline: **Python 3.12** (psycopg, clickhouse-connect) — micro-batch idempotente
+- API: **FastAPI + Uvicorn**
 
 ## Credenciais (dev — via `.env`)
 

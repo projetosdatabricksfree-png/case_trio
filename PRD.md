@@ -203,15 +203,15 @@ Detalhamento completo de fluxos, SLAs, pontos de falha e serviços AWS no **Desa
 
 Espelham os **critérios mínimos** do desafio e são a barra de entrega:
 
-- [ ] `docker-compose up -d` sobe todo o ambiente sem erros.
-- [ ] Scripts de seed rodam e populam os bancos com volume relevante (10M+).
-- [ ] Queries do Desafio 1 executam com sucesso e têm `EXPLAIN ANALYZE` documentado.
-- [ ] Pipeline TimescaleDB → ClickHouse funciona end-to-end de forma demonstrável.
-- [ ] Pelo menos um dashboard Grafana funcional consultando ClickHouse.
-- [ ] Documentação cobre decisões técnicas com justificativas.
-- [ ] Análise de migração PostgreSQL → Aurora presente e fundamentada.
-- [ ] Runbook de incidente e resposta ao SEV-1 escritos e defensáveis.
-- [ ] Repositório organizado conforme estrutura sugerida + README raiz.
+- [x] `docker-compose up -d` sobe todo o ambiente sem erros.
+- [x] Scripts de seed rodam e populam os bancos com volume relevante (10M+).
+- [x] Queries do Desafio 1 executam com sucesso e têm `EXPLAIN ANALYZE` documentado.
+- [x] Pipeline TimescaleDB → ClickHouse funciona end-to-end de forma demonstrável.
+- [x] Pelo menos um dashboard Grafana funcional consultando ClickHouse.
+- [x] Documentação cobre decisões técnicas com justificativas.
+- [x] Análise de migração PostgreSQL → Aurora presente e fundamentada.
+- [x] Runbook de incidente e resposta ao SEV-1 escritos e defensáveis.
+- [x] Repositório organizado conforme estrutura sugerida + README raiz.
 
 ---
 
