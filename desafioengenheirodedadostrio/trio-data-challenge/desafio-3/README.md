@@ -12,7 +12,7 @@ Backup/recovery, observabilidade (Grafana) e resposta a incidentes.
 | `grafana/provisioning/datasources/` | 3 datasources (uid explícito) | ✅ Sprint 00/06 |
 | `grafana/provisioning/dashboards/` | 4 dashboards (TimescaleDB, Pipeline, ClickHouse, Postgres legado) | ✅ Sprint 06 |
 | `grafana/provisioning/alerting/` | Contact point + regra PoC (pipeline lag SEV-2) | ✅ Sprint 06 |
-| `incident-response.md` | Resposta a incidente SEV-1 | Sprint 07 |
+| `incident-response.md` | Resposta a incidente SEV-1 (volume zero no CH) + demo reproduzível | ✅ Sprint 07 |
 
 > `grafana/provisioning/` é montado pelo `docker-compose.yml` em `/etc/grafana/provisioning`.
 
@@ -48,3 +48,14 @@ make recovery-demo     # ciclo perda -> recovery validado (antes == depois)
 Cenário "storage em 92%" — remover chunks antigos sem downtime e **sem perder os CAggs**:
 [`runbook.md`](runbook.md). Validação read-only segura ao vivo:
 `make runbook-storage-check`.
+
+## Resposta a incidente (SEV-1)
+
+Cenário "volume zero no ClickHouse" — árvore de hipóteses ordenada (manutenção no TimescaleDB
+**e** mudança de security group), investigação, resolução, pós-incidente e comunicação:
+[`incident-response.md`](incident-response.md). É o gatilho do alerta #2 (`alerts.md`) e é
+**reproduzível ao vivo**:
+
+```bash
+make incident-demo     # pipeline cortado -> CH stale -> resolução -> CH converge com o TS
+```

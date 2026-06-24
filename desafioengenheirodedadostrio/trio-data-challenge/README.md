@@ -76,6 +76,37 @@ Atalhos: `make psql-ts`, `make psql-legado`, `make ch`.
 | `make migrate-ch` · `seed-ch` · `optimize-ch` · `queries-ch` | ClickHouse (Sprint 04): tabela+MVs+dictionary → carga → OPTIMIZE FINAL → flagship/dictGet |
 | `make migrate-pipeline` · `pipeline-once` · `pipeline-refs` · `pipeline-mutation-demo` | Pipelines (Sprint 05): tabelas de controle → sync TS→CH idempotente → refresh de referência → demo de mutação |
 | `make backup` · `recovery-demo` · `runbook-storage-check` | Operação (Sprint 06): backup dos 3 bancos → demo de recovery validada → validação read-only do runbook de storage |
+| `make incident-demo` | Incidente (Sprint 07): reproduz o SEV-1 de volume zero no ClickHouse → resolução → CH converge com o TS |
+
+## Como demonstrar cada parte
+
+Sequência completa do zero (smoke seed ~20k; troque por `make seed`/`seed-ch` para volume cheio). É a
+mesma ordem que o CI executa.
+
+```bash
+make reset                                   # down -v -> up -> smoke (ambiente limpo, 6 serviços)
+
+# Desafio 1 — TimescaleDB: modelagem, CAggs, políticas, queries Q1–Q4 (EXPLAIN antes/depois)
+make migrate seed-smoke index sanity
+make index-s2 caggs policies queries
+
+# Desafio 1 — Legado + migração (RDS/Aurora) e ClickHouse + API
+make migrate-legado seed-legado index-legado queries-legado
+make migrate-ch seed-ch-smoke queries-ch optimize-ch
+curl -fsS "http://localhost:8000/transactions/volume/realtime?window_minutes=1440" | jq
+
+# Desafio 2 — Pipeline TS → CH: idempotência (rodar 2x não duplica), mutação e DLQ
+make migrate-pipeline pipeline-once pipeline-refs pipeline-mutation-demo
+
+# Desafio 3 — Operação: backup/recovery, runbook, dashboards/alertas e incidente SEV-1
+make backup recovery-demo runbook-storage-check
+make incident-demo                           # volume zero no CH -> resolução -> CH == TS
+# Grafana http://localhost:3000 (admin/admin): pasta 'Trio' com 4 dashboards + alerta PoC
+```
+
+Detalhe de cada resultado (EXPLAIN, RTO/RPO, hipóteses do incidente) nos REPORTs e docs por desafio;
+mapa em [`docs/validation-checklist.md`](docs/validation-checklist.md) e no
+[índice de entregáveis](../../README.md#índice-de-entregáveis) da raiz.
 
 ## Estrutura
 
@@ -92,8 +123,9 @@ trio-data-challenge/
 ├── desafio-3/                  # Operação e observabilidade
 │   ├── backup/                 # backup dos 3 bancos + recovery-demo (✅)
 │   ├── runbook.md · alerts.md  # runbook de storage + alertas críticos (✅)
+│   ├── incident-response.md    # resposta ao SEV-1 (make incident-demo) (✅)
 │   └── grafana/provisioning/   # datasources + 4 dashboards + alerta PoC (✅)
-└── docs/                       # docs transversais + docs/adr/
+└── docs/                       # ADRs + presentation-script.md + validation-checklist.md
 ```
 
 ## Persistência: `down` vs `down -v`
